@@ -22,8 +22,12 @@
 #include <cstdint>
 #include <future>
 #include <mutex>
+#include <set>
 #include <string>
 #include <vector>
+
+class Acuneus;
+class IAudioReceiver;
 
 class CandleVideo : public IAudioSource, public IDrawableModule, public IFloatSliderListener, public IIntSliderListener, public IDropdownListener, public IButtonListener, public ITextEntryListener
 {
@@ -94,6 +98,8 @@ private:
    void AdvanceToNextGeneratedVideo();
    void LoadSelectedVideo();
    void LoadVideoIntoTarget(const std::string& path);
+   std::vector<Acuneus*> GetTargetAcuneusModules();
+   void CollectTargetAcuneusModules(IAudioReceiver* receiver, std::vector<Acuneus*>& acuneusModules, std::set<IAudioReceiver*>& visited);
    void UnloadTargetMediaIfNeeded(const std::vector<std::string>& deletingPaths);
    bool DeleteFileWithRetries(const std::string& path) const;
    void DeleteSelectedGeneratedVideo();

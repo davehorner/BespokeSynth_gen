@@ -10,6 +10,7 @@
 
 #include "CandleVideo.h"
 #include "Acuneus.h"
+#include "AudioSplitter.h"
 #include "FileStream.h"
 #include "IAudioReceiver.h"
 #include "ModularSynth.h"
@@ -1181,16 +1182,44 @@ void CandleVideo::DeleteAllGeneratedVideos()
 
 void CandleVideo::LoadVideoIntoTarget(const std::string& path)
 {
-   auto* acuneus = dynamic_cast<Acuneus*>(GetTarget());
-   if (acuneus == nullptr)
+   const bool targetIsDirectAcuneus = dynamic_cast<Acuneus*>(GetTarget()) != nullptr;
+   const std::vector<Acuneus*> acuneusModules = GetTargetAcuneusModules();
+   if (acuneusModules.empty())
    {
-      AppendStatusText("\nconnect to an acuneus module");
+      AppendStatusText("\nconnect to an acuneus module, or to an audio splitter that targets acuneus modules");
       return;
    }
 
-   if (!acuneus->IsInstanceOpen())
-      acuneus->OpenInstance();
-   acuneus->SetMediaPath(path);
+   int loadedCount = 0;
+   int skippedClosedCount = 0;
+   for (auto* acuneus : acuneusModules)
+   {
+      if (acuneus == nullptr)
+         continue;
+      if (!acuneus->IsInstanceOpen())
+      {
+         if (targetIsDirectAcuneus)
+            acuneus->OpenInstance();
+         else
+         {
+            ++skippedClosedCount;
+            continue;
+         }
+      }
+      if (!acuneus->IsInstanceOpen())
+         continue;
+      acuneus->SetMediaPath(path);
+      ++loadedCount;
+   }
+
+   if (loadedCount == 0)
+   {
+      AppendStatusText("\nno open acuneus modules behind splitter");
+      if (skippedClosedCount > 0)
+         AppendStatusText(" (" + ofToString(skippedClosedCount) + " closed)");
+      return;
+   }
+
    mLoadedVideoPath = juce::File(path).getFullPathName().toStdString();
    for (int i = 0; i < (int)mGeneratedVideoPaths.size(); ++i)
    {
@@ -1201,12 +1230,44 @@ void CandleVideo::LoadVideoIntoTarget(const std::string& path)
       }
    }
    AppendStatusText("\nloaded " + juce::File(path).getFileName().toStdString());
+   if (loadedCount > 1)
+      AppendStatusText(" into " + ofToString(loadedCount) + " acuneus modules");
+   if (skippedClosedCount > 0)
+      AppendStatusText(" (" + ofToString(skippedClosedCount) + " closed skipped)");
 
    if (mAutonext)
    {
       const double durationSeconds = std::max(0.25, GetVideoDurationSeconds(path));
       mAutonextVideoLoadTime = gTime + durationSeconds * 1000.0;
       AppendStatusText(" (" + ofToString(durationSeconds, 2) + "s)");
+   }
+}
+
+std::vector<Acuneus*> CandleVideo::GetTargetAcuneusModules()
+{
+   std::vector<Acuneus*> acuneusModules;
+   std::set<IAudioReceiver*> visited;
+   CollectTargetAcuneusModules(GetTarget(), acuneusModules, visited);
+   return acuneusModules;
+}
+
+void CandleVideo::CollectTargetAcuneusModules(IAudioReceiver* receiver, std::vector<Acuneus*>& acuneusModules, std::set<IAudioReceiver*>& visited)
+{
+   if (receiver == nullptr || visited.find(receiver) != visited.end())
+      return;
+   visited.insert(receiver);
+
+   if (auto* acuneus = dynamic_cast<Acuneus*>(receiver))
+   {
+      if (std::find(acuneusModules.begin(), acuneusModules.end(), acuneus) == acuneusModules.end())
+         acuneusModules.push_back(acuneus);
+      return;
+   }
+
+   if (auto* splitter = dynamic_cast<AudioSplitter*>(receiver))
+   {
+      for (int i = 0; i < splitter->GetNumTargets(); ++i)
+         CollectTargetAcuneusModules(splitter->GetTarget(i), acuneusModules, visited);
    }
 }
 
@@ -1224,9 +1285,13 @@ void CandleVideo::UnloadTargetMediaIfNeeded(const std::vector<std::string>& dele
    if (!deletingLoadedVideo)
       return;
 
-   auto* acuneus = dynamic_cast<Acuneus*>(GetTarget());
-   if (acuneus != nullptr)
+   const std::vector<Acuneus*> acuneusModules = GetTargetAcuneusModules();
+   for (auto* acuneus : acuneusModules)
+   {
+      if (acuneus == nullptr)
+         continue;
       acuneus->UnloadMedia();
+   }
 
    mLoadedVideoPath.clear();
    mAutonextVideoLoadTime = -1;

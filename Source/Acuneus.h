@@ -195,6 +195,7 @@ private:
    std::string mExecutableDir;
    std::string mWindowTitle{ "Acuneus" };
    std::string mOpenBinName;
+   std::string mLoadedMediaPath;
    std::string mStatus;
    int mSelectedBin{ 0 };
    int mParamColumns{ 2 };

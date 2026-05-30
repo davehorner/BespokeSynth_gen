@@ -742,6 +742,7 @@ void Acuneus::CloseInstance()
       std::lock_guard<std::mutex> lock(mPcmQueueMutex);
       mPcmQueue.clear();
    }
+   mLoadedMediaPath.clear();
    ClearParamControls();
    mPendingDiscoveryRequests = 0;
    mPendingAnchorApplies = 0;
@@ -1247,6 +1248,8 @@ void Acuneus::SetMediaPath(const std::string& path)
 
    std::string normalizedPath = path;
    std::replace(normalizedPath.begin(), normalizedPath.end(), '\\', '/');
+   if (normalizedPath == mLoadedMediaPath)
+      return;
 
    ParamControl* param = nullptr;
    for (auto& candidate : mParams)
@@ -1280,6 +1283,7 @@ void Acuneus::SetMediaPath(const std::string& path)
       return;
    }
 
+   mLoadedMediaPath = normalizedPath;
    SetStatus("loaded media " + juce::File(normalizedPath).getFileName().toStdString());
 #endif
 }
@@ -1304,6 +1308,7 @@ void Acuneus::UnloadMedia()
    if (mInstance != nullptr)
       cuneus_trigger_action(mInstance, "media_unload", 1.0f);
 
+   mLoadedMediaPath.clear();
    SetStatus("unloaded media");
 #endif
 }

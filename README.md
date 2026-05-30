@@ -2,9 +2,11 @@
 [![Contributor Covenant](https://img.shields.io/badge/Contributor%20Covenant-2.1-4baaaa.svg)](code_of_conduct.md)
 
 
-# Bespoke Synth
+# BespokeSynth_gen
 
-A software modular synth that I've been building for myself since 2011, and now you can use it!
+This is the `_gen` fork of Bespoke Synth. It keeps the original modular synth workflow and adds local generative media patches that connect Bespoke audio, Acuneus GPU windows, StableAudio music generation, CandleVideo video generation, and Ollama prompt generation.
+
+Upstream Bespoke Synth is a software modular synth that Ryan Challinor has been building since 2011.
 
 [Nightly Build](https://github.com/BespokeSynth/BespokeSynth/releases/tag/Nightly) (updated every commit)
 
@@ -40,7 +42,58 @@ Join the [Bespoke Discord](https://discord.gg/YdTMkvvpZZ) for support and to dis
 * VST, VST3, LV2 hosting
 * Python livecoding
 * MIDI & OSC controller mapping
+* optional Acuneus integration for GPU shader windows, including one-click `acuneus/stableaudio`, `acuneus/candlevideo`, `acuneus/synth`, and `audio/video demo` welcome patches
+* StableAudio node for local audio generation, looping, auto-generation, metadata browsing, Ollama music prompts, and Acuneus music automation
+* CandleVideo node for local LTX video generation, Ollama video prompts, CRC32-based output filenames, autoload/autonext playback, and Acuneus media loading
 * Works on Windows, Mac, and Linux
+
+### _gen Fork Notes
+
+The fork identifies itself as `BespokeSynth_gen` at the CMake project and JUCE product-name level. The internal CMake target is still named `BespokeSynth`, but the built app/executable is emitted as `BespokeSynth_gen` / `BespokeSynth_gen.exe`; the included `task run` and debug helpers use that forked executable name.
+
+The main local integrations are:
+
+* `R:\w\rust\c` for the Acuneus runtime and C ABI
+* `R:\w\rust\candle-video` for the Candle LTX video generator
+* local StableAudio model directories selected by CMake when available
+* optional Ollama at `127.0.0.1:11434` for prompt ideas
+
+### Acuneus / StableAudio Visualizer
+
+When Bespoke is built with Acuneus support, the welcome screen includes an `acuneus/stableaudio` button. It creates:
+
+```text
+stableaudio -> acuneus/audio visualizer -> gain -> output
+```
+
+The shortcut enables StableAudio auto-generation, opens the Acuneus `audiovis` shader, passes audio through Acuneus to `gain`, and feeds the shader's spectrum buffer from the Bespoke audio cable. The Acuneus module can also automate shader sliders from incoming audio and control the Acuneus window position, size, resolution, time, FPS, overlay, and title bar.
+
+The `acuneus/candlevideo` welcome shortcut creates:
+
+```text
+candlevideo -> acuneus/voronoi
+```
+
+The CandleVideo node runs the local `R:\w\rust\candle-video` LTX video generator, writes MP4 files under Bespoke's `candlevideo/<module-name>` data folder, and autoloads the generated `video.mp4` into the connected Acuneus module's media path. The node defaults to the local LTX 0.9.8 distilled weights in `R:\w\rust\candle-video\models\ltx-video` and uses the `flash-attn` Cargo feature by default; clear or change its Cargo features field if the local generator should run with different Candle features.
+
+The `audio/video demo` welcome shortcut creates a combined generative patch:
+
+```text
+stableaudio -> acuneus/voronoi -> gain -> output
+candlevideo -> acuneus/voronoi
+```
+
+StableAudio auto-generates looping audio and feeds Acuneus music automation. CandleVideo generates MP4s, autoloads them into the same Acuneus window, and can autonext through generated videos while new renders continue in the background. This is the preferred quick demo for using StableAudio and CandleVideo together.
+
+The `acuneus/synth` welcome shortcut creates:
+
+```text
+keyboarddisplay -> acuneus/synth -> gain -> output
+```
+
+The keyboard sends notes to the Acuneus GPU synth. The synth sends PCM feedback back to Bespoke, and Bespoke plays it from the Acuneus audio output cable. Generated boolean params are shown as checkboxes; for the synth this includes `Local Audio`, which lets the synth process play through its own audio device in addition to Bespoke's routed output.
+
+The Acuneus runtime and C ABI live in `R:\w\rust\c`. The Bespoke-side module is implemented in `Source/Acuneus.cpp` and `Source/Acuneus.h`.
 
 
 ### License

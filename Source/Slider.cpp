@@ -304,6 +304,8 @@ void FloatSlider::OnClicked(float x, float y, bool right)
 {
    if (right)
    {
+      if (mOwner != nullptr && mOwner->FloatSliderContextMenu(this))
+         return;
       DisplayLFOControl();
       return;
    }

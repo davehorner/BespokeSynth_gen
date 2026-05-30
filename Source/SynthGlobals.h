@@ -58,7 +58,7 @@ void* operator new[](std::size_t size, const char* file, int line) throw(std::ba
 #endif
 
 #define MAX_BUFFER_SIZE 60 * gSampleRate
-#define MAX_TEXTENTRY_LENGTH 1024
+#define MAX_TEXTENTRY_LENGTH 16384
 
 #ifndef M_PI
 #define M_PI PI

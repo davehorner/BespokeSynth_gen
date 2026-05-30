@@ -33,6 +33,8 @@
 
 #include "juce_gui_basics/juce_gui_basics.h"
 
+#include <algorithm>
+
 IKeyboardFocusListener* IKeyboardFocusListener::sCurrentKeyboardFocus = nullptr;
 IKeyboardFocusListener* IKeyboardFocusListener::sKeyboardFocusBeforeClick = nullptr;
 
@@ -238,7 +240,9 @@ void TextEntry::OnClicked(float x, float y, bool right)
 
       char caretCheck[MAX_TEXTENTRY_LENGTH];
       size_t checkLength = strnlen(mString, MAX_TEXTENTRY_LENGTH);
+      checkLength = std::min(checkLength, (size_t)MAX_TEXTENTRY_LENGTH - 1);
       strncpy(caretCheck, mString, checkLength);
+      caretCheck[checkLength] = 0;
       int lastSubstrWidth = gFontFixedWidth.GetStringWidth(caretCheck, 12);
       for (int i = (int)checkLength - 1; i >= 0; --i)
       {
@@ -280,8 +284,8 @@ void TextEntry::RemoveSelectedText()
    int caretStart = MAX(0, MIN(mCaretPosition, mCaretPosition2));
    int caretEnd = MIN((int)strlen(mString), MAX(mCaretPosition, mCaretPosition2));
    std::string newString = mString;
-   strcpy(mString, (newString.substr(0, caretStart) + newString.substr(caretEnd)).c_str());
-   MoveCaret(caretStart, false);
+   StringCopy(mString, (newString.substr(0, caretStart) + newString.substr(caretEnd)).c_str(), MAX_TEXTENTRY_LENGTH);
+   MoveCaret(std::min(caretStart, (int)strlen(mString)), false);
 }
 
 void TextEntry::SelectAll()
@@ -414,11 +418,12 @@ void TextEntry::OnKeyPressed(int key, bool isRepeat)
       juce::String clipboard = TheSynth->GetTextFromClipboard();
 
       std::string newString = mString;
-      strcpy(mString, (newString.substr(0, mCaretPosition) + clipboard.toStdString() + newString.substr(mCaretPosition)).c_str());
+      StringCopy(mString, (newString.substr(0, mCaretPosition) + clipboard.toStdString() + newString.substr(mCaretPosition)).c_str(), MAX_TEXTENTRY_LENGTH);
+      const int newCaretPosition = std::min(mCaretPosition + clipboard.length(), (int)strlen(mString));
       if (UserPrefs.immediate_paste.Get())
          AcceptEntry(true);
       else
-         MoveCaret(mCaretPosition + clipboard.length());
+         MoveCaret(newCaretPosition);
    }
    else if ((toupper(key) == 'C' || toupper(key) == 'X') && GetKeyModifiers() == kModifier_Command)
    {

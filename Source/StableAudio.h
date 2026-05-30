@@ -37,6 +37,7 @@
 #include <future>
 #include <mutex>
 #include <string>
+#include <vector>
 
 class Sample;
 struct StableAudioModel;
@@ -47,13 +48,14 @@ public:
    StableAudio();
    ~StableAudio() override;
    static IDrawableModule* Create() { return new StableAudio(); }
-   static bool AcceptsAudio() { return false; }
+   static bool AcceptsAudio() { return true; }
    static bool AcceptsNotes() { return true; }
    static bool AcceptsPulses() { return true; }
 
    void CreateUIControls() override;
    void Init() override;
    void Poll() override;
+   void EnableAutoGenerationPatch();
 
    void Process(double time) override;
    void SetEnabled(bool enabled) override { mEnabled = enabled; }
@@ -75,7 +77,7 @@ public:
    void SetUpFromSaveData() override;
    void SaveState(FileStreamOut& out) override;
    void LoadState(FileStreamIn& in, int rev) override;
-   int GetModuleSaveStateRev() const override { return 6; }
+   int GetModuleSaveStateRev() const override { return 7; }
    std::vector<IUIControl*> ControlsToIgnoreInSaveState() const override;
 
 private:
@@ -89,7 +91,17 @@ private:
       float seconds{ 0 };
    };
 
+   struct PromptIdeasResult
+   {
+      bool success{ false };
+      std::vector<std::string> prompts;
+      std::string source;
+      std::string status;
+   };
+
    void DrawModule() override;
+   void OnClicked(float x, float y, bool right) override;
+   bool MouseScrolled(float x, float y, float scrollX, float scrollY, bool isSmoothScroll, bool isInvertedScroll) override;
    void StartGeneration();
    GenerationResult GenerateToFile(std::string prompt, std::string ditPath, std::string decoderPath, std::string textEncoderPath, float seconds, int steps, int seed, std::string outputPath);
    void LoadGeneratedSample(const std::string& path);
@@ -108,6 +120,9 @@ private:
    void UpdatePlaybackControls();
    void RefreshPromptChoices();
    void GenerateMorePromptIdeas();
+   static PromptIdeasResult GeneratePromptIdeasFromOllama(std::string model, std::string prompt, std::string transportPrompt);
+   void CompletePromptIdeas(PromptIdeasResult result);
+   void UseRandomPromptAndStartGeneration();
    std::string MakeGeneratedPromptIdea();
    std::string GetTransportPromptFragment() const;
    bool PromptContainsTransportData(const std::string& prompt) const;
@@ -115,6 +130,8 @@ private:
    void AutoplayNextPrompt();
    void ScheduleNextAutoplay();
    void AddPromptChoice(const std::string& prompt);
+   void SelectPromptChoice(int index);
+   void AppendPromptIdeasStatus(const std::string& source, int startIndex);
    void ApplyPromptChoice();
    void SetPromptText(const std::string& prompt);
    bool TryGetPromptDurationSeconds(const std::string& prompt, float& seconds) const;
@@ -137,6 +154,10 @@ private:
    void UpdateCrossfadeSlider();
    const char* GetSelectedModelLabel() const;
    const char* GetSelectedModelDescription() const;
+   ofRectangle GetStatusRect() const;
+   std::string GetStatusText() const;
+   std::vector<std::string> GetWrappedStatusLines() const;
+   void ClampStatusScroll();
 
    // Guard sample pointer swaps and playback reads. Generated WAVs load on the UI thread,
    // while Process() consumes these Sample objects on the audio thread.
@@ -157,8 +178,12 @@ private:
    std::string mCurrentSamplePrompt;
 
    std::future<GenerationResult> mGenerationFuture;
+   std::future<PromptIdeasResult> mPromptIdeasFuture;
    bool mGenerationInProgress{ false };
+   bool mPromptIdeasInProgress{ false };
+   bool mGenerateAfterPromptIdeas{ false };
    std::string mStatusString;
+   int mStatusScrollLine{ 0 };
    double mAutoplayNextGenerationTime{ -1 };
    double mCrossfadeStartTime{ -1 };
    double mPendingTransportSyncTime{ -1 };
@@ -180,6 +205,7 @@ private:
    std::string mModelDir;
    int mModelSelection{ kModel_SmallMusic };
    std::string mPrompt;
+   std::string mOllamaModel{ "llama3.2" };
    std::string mDitPath;
    std::string mDecoderPath;
    std::string mTextEncoderPath;
@@ -202,6 +228,7 @@ private:
    DropdownList* mPromptDropdown{ nullptr };
    ClickButton* mMoreIdeasButton{ nullptr };
    Checkbox* mAutoplayCheckbox{ nullptr };
+   TextEntry* mOllamaModelEntry{ nullptr };
    DropdownList* mModelDropdown{ nullptr };
    DropdownList* mGeneratedWavDropdown{ nullptr };
    TextEntry* mDitPathEntry{ nullptr };

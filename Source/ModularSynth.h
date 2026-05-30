@@ -158,6 +158,11 @@ public:
    void LoadLayout(ofxJSONElement json);
    std::string GetLoadedLayout() const { return mLoadedLayoutPath; }
    void ReloadInitialLayout() { mWantReloadInitialLayout = true; }
+   void LoadAcuneusPatch() { mWantLoadAcuneusPatch = true; }
+   void LoadAcuneusStableAudioPatch() { mWantLoadAcuneusStableAudioPatch = true; }
+   void LoadAcuneusCandleVideoPatch() { mWantLoadAcuneusCandleVideoPatch = true; }
+   void LoadAcuneusSynthPatch() { mWantLoadAcuneusSynthPatch = true; }
+   void LoadAcuneusYoutubePatch() { mWantLoadAcuneusYoutubePatch = true; }
    bool HasFatalError() { return mFatalError != ""; }
 
    void AddLissajousDrawer(IDrawableModule* module) { mLissajousDrawers.push_back(module); }
@@ -425,6 +430,11 @@ private:
 
    std::string mLoadedLayoutPath;
    bool mWantReloadInitialLayout{ false };
+   bool mWantLoadAcuneusPatch{ false };
+   bool mWantLoadAcuneusStableAudioPatch{ false };
+   bool mWantLoadAcuneusCandleVideoPatch{ false };
+   bool mWantLoadAcuneusSynthPatch{ false };
+   bool mWantLoadAcuneusYoutubePatch{ false };
    std::string mCurrentSaveStatePath;
    std::string mStartupSaveStateFile;
 

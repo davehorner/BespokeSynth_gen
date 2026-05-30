@@ -167,7 +167,7 @@ tasks:
   # Run helpers
   # -------------------------------
   run:
-    desc: Run BespokeSynth (platform-aware)
+    desc: Run BespokeSynth_gen (platform-aware)
     cmds:
       - task: configure
       - task: build
@@ -178,17 +178,69 @@ tasks:
   run:windows:
     platforms: [windows]
     cmds:
-      - powershell -NoProfile -ExecutionPolicy Bypass -Command "& (Join-Path (Get-Location) '{{.BUILD_DIR}}\Source\BespokeSynth_artefacts\{{.CONFIG}}\BespokeSynth.exe')"
+      - powershell -NoProfile -ExecutionPolicy Bypass -Command "& (Join-Path (Get-Location) '{{.BUILD_DIR}}\Source\BespokeSynth_artefacts\{{.CONFIG}}\BespokeSynth_gen.exe')"
 
   run:posix:
     platforms: [linux, darwin]
     cmds:
       - |
-        BIN="{{.BUILD_DIR}}/Bespoke/BespokeSynth"
-        [ -x "$BIN" ] || BIN="{{.BUILD_DIR}}/BespokeSynth"
+        BIN="{{.BUILD_DIR}}/Bespoke/BespokeSynth_gen"
+        [ -x "$BIN" ] || BIN="{{.BUILD_DIR}}/BespokeSynth_gen"
         if [ -x "$BIN" ]; then
           "$BIN"
         else
           echo "Executable not found. Did the build succeed?"
           exit 1
+        fi
+
+  debug:
+    desc: Build Debug and launch BespokeSynth_gen under a debugger
+    cmds:
+      - task: debug:build:windows
+      - task: debug:build:posix
+      - task: debug:windows
+      - task: debug:posix
+    silent: true
+
+  debug:build:windows:
+    desc: Build the Windows Debug configuration
+    platforms: [windows]
+    cmds:
+      - powershell -NoProfile -ExecutionPolicy Bypass -Command "Stop-Process -Name BespokeSynth_gen,BespokeSynth,acuneus -Force -ErrorAction SilentlyContinue; exit 0"
+      - task: configure:windows
+        vars: { CONFIG: Debug }
+      - cmake --build "{{.BUILD_DIR}}" --config Debug --parallel
+
+  debug:build:posix:
+    desc: Configure and build a POSIX Debug binary
+    platforms: [linux, darwin]
+    cmds:
+      - mkdir -p "{{.BUILD_DIR}}"
+      - cmake -S . -B "{{.BUILD_DIR}}" -DCMAKE_BUILD_TYPE=Debug
+      - cmake --build "{{.BUILD_DIR}}" --parallel
+
+  debug:windows:
+    desc: Launch the Debug build under Visual Studio or the JIT debugger
+    platforms: [windows]
+    cmds:
+      - powershell -NoProfile -ExecutionPolicy Bypass -File scripts/debug-bespoke.ps1 -BuildDir "{{.BUILD_DIR}}" -Config Debug
+
+  debug:posix:
+    desc: Launch the Debug build under lldb/gdb on POSIX
+    platforms: [linux, darwin]
+    cmds:
+      - |
+        BIN="{{.BUILD_DIR}}/Bespoke/BespokeSynth_gen"
+        [ -x "$BIN" ] || BIN="{{.BUILD_DIR}}/BespokeSynth_gen"
+        if [ ! -x "$BIN" ]; then
+          echo "Executable not found. Did the build succeed?"
+          exit 1
+        fi
+        if command -v lldb >/dev/null 2>&1; then
+          lldb -- "$BIN"
+        elif command -v gdb >/dev/null 2>&1; then
+          gdb --args "$BIN"
+        else
+          echo "No lldb or gdb found. Launching Debug build normally."
+          "$BIN"
         fi

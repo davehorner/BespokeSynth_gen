@@ -283,7 +283,8 @@
 #include "SessionOrganizer.h"
 #include "AudioSyncer.h"
 #include "StableAudio.h"
-#include "Cuneus.h"
+#include "CandleVideo.h"
+#include "Acuneus.h"
 
 #include <juce_core/juce_core.h>
 
@@ -522,7 +523,8 @@ ModuleFactory::ModuleFactory()
    REGISTER(SessionOrganizer, sessionorganizer, kModuleCategory_Other);
    REGISTER(AudioSyncer, audiosyncer, kModuleCategory_Audio);
    REGISTER(StableAudio, stableaudio, kModuleCategory_Synth);
-   REGISTER(Cuneus, cuneus, kModuleCategory_Other);
+   REGISTER(CandleVideo, candlevideo, kModuleCategory_Other);
+   REGISTER(Acuneus, acuneus, kModuleCategory_Other);
 
    //REGISTER_EXPERIMENTAL(MidiPlayer, midiplayer, kModuleCategory_Instrument);
    REGISTER_HIDDEN(Autotalent, autotalent, kModuleCategory_Audio);

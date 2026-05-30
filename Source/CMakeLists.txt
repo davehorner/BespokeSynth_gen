@@ -8,7 +8,7 @@ else()
 endif()
 
 juce_add_gui_app(BespokeSynth
-    PRODUCT_NAME BespokeSynth
+    PRODUCT_NAME BespokeSynth_gen
     ICON_BIG ${CMAKE_SOURCE_DIR}/bespoke_icon.png
     MICROPHONE_PERMISSION_ENABLED TRUE
     CAMERA_PERMISSION_ENABLED     TRUE
@@ -137,8 +137,12 @@ target_sources(BespokeSynth PRIVATE
     Compressor.h
     ControlInterface.cpp
     ControlInterface.h
-    Cuneus.cpp
-    Cuneus.h
+    Acuneus.cpp
+    Acuneus.h
+    CandleVideo.cpp
+    CandleVideo.h
+    OllamaPromptGenerator.cpp
+    OllamaPromptGenerator.h
     ControlRecorder.cpp
     ControlRecorder.h
     ControlSequencer.cpp
@@ -820,85 +824,108 @@ target_include_directories(BespokeSynth PRIVATE
     ${Python_INCLUDE_DIRS}
     )
 
-set(BESPOKE_CUNEUS_DEFAULT_ROOT "")
-if(EXISTS "R:/w/cuneus/Cargo.toml")
-    set(BESPOKE_CUNEUS_DEFAULT_ROOT "R:/w/cuneus")
+set(BESPOKE_ACUNEUS_DEFAULT_ROOT "")
+if(EXISTS "R:/w/rust/c/Cargo.toml")
+    set(BESPOKE_ACUNEUS_DEFAULT_ROOT "R:/w/rust/c")
+elseif(EXISTS "R:/w/Acuneus/Cargo.toml")
+    set(BESPOKE_ACUNEUS_DEFAULT_ROOT "R:/w/Acuneus")
 endif()
-set(BESPOKE_CUNEUS_ROOT "${BESPOKE_CUNEUS_DEFAULT_ROOT}" CACHE PATH "Path to a local cuneus workspace; leave empty to disable cuneus integration")
-set(BESPOKE_CUNEUS_CARGO_TARGET_DIR "${CMAKE_SOURCE_DIR}/ignore/cuneus-target" CACHE PATH "Cargo target directory for cuneus")
+set(BESPOKE_ACUNEUS_ROOT "${BESPOKE_ACUNEUS_DEFAULT_ROOT}" CACHE PATH "Path to a local Acuneus workspace; leave empty to disable Acuneus integration")
+set(BESPOKE_ACUNEUS_CARGO_TARGET_DIR "${CMAKE_SOURCE_DIR}/ignore/acuneus-target" CACHE PATH "Cargo target directory for Acuneus")
+set(BESPOKE_ACUNEUS_RUNNER_CONTENT "both" CACHE STRING "What acuneus.exe can run: examples, bins, or both")
+set_property(CACHE BESPOKE_ACUNEUS_RUNNER_CONTENT PROPERTY STRINGS examples bins both)
 
-if(BESPOKE_CUNEUS_ROOT)
+if(BESPOKE_ACUNEUS_ROOT AND BESPOKE_ACUNEUS_DEFAULT_ROOT AND EXISTS "${BESPOKE_ACUNEUS_DEFAULT_ROOT}/include/acuneus.h")
+    file(READ "${BESPOKE_ACUNEUS_DEFAULT_ROOT}/include/acuneus.h" BESPOKE_ACUNEUS_DEFAULT_HEADER)
+    set(BESPOKE_ACUNEUS_CURRENT_HEADER "")
+    if(EXISTS "${BESPOKE_ACUNEUS_ROOT}/include/acuneus.h")
+        file(READ "${BESPOKE_ACUNEUS_ROOT}/include/acuneus.h" BESPOKE_ACUNEUS_CURRENT_HEADER)
+    endif()
+    if(BESPOKE_ACUNEUS_DEFAULT_HEADER MATCHES "cuneus_instance_open_embedded" AND NOT BESPOKE_ACUNEUS_CURRENT_HEADER MATCHES "cuneus_instance_open_embedded")
+        set(BESPOKE_ACUNEUS_ROOT "${BESPOKE_ACUNEUS_DEFAULT_ROOT}" CACHE PATH "Path to a local Acuneus workspace; leave empty to disable Acuneus integration" FORCE)
+    endif()
+endif()
+
+if(BESPOKE_ACUNEUS_ROOT)
     find_program(CARGO_EXECUTABLE cargo)
     if(NOT CARGO_EXECUTABLE)
-        message(FATAL_ERROR "cuneus support requires cargo. Set BESPOKE_CUNEUS_ROOT empty to disable it.")
+        message(FATAL_ERROR "Acuneus support requires cargo. Set BESPOKE_ACUNEUS_ROOT empty to disable it.")
     endif()
 
-    set(BESPOKE_CUNEUS_BINS
-        roto
-        cuneus
-        tree
-        2dneuron
-        gabor
-        plasma
-        lorenz
-        nebula
-        satan
-        sdvert
-        asahi
-    )
-    set(BESPOKE_CUNEUS_CARGO_ARGS build --release --no-default-features --lib)
-    foreach(BESPOKE_CUNEUS_BIN IN LISTS BESPOKE_CUNEUS_BINS)
-        list(APPEND BESPOKE_CUNEUS_CARGO_ARGS --bin "${BESPOKE_CUNEUS_BIN}")
+    set(BESPOKE_ACUNEUS_BINS acuneus)
+    if(BESPOKE_ACUNEUS_RUNNER_CONTENT STREQUAL "bins" OR BESPOKE_ACUNEUS_RUNNER_CONTENT STREQUAL "both")
+        list(APPEND BESPOKE_ACUNEUS_BINS
+            roto
+            cuneus-2dneuron
+            cuneus-blockgame
+            cuneus-cuneus
+            cuneus-debugscreen
+            cuneus-gaussian
+            cuneus-gaussian3d
+            cuneus-jfa
+            cuneus-kuwahara
+            cuneus-lego
+            cuneus-physarum
+            cuneus-synth
+            cuneus-system
+            cuneus-tameimp
+            cuneus-veridisquo
+            cuneus-volumepassage
+        )
+    endif()
+    set(BESPOKE_ACUNEUS_CARGO_ARGS build --release --lib)
+    foreach(BESPOKE_ACUNEUS_BIN IN LISTS BESPOKE_ACUNEUS_BINS)
+        list(APPEND BESPOKE_ACUNEUS_CARGO_ARGS --bin "${BESPOKE_ACUNEUS_BIN}")
     endforeach()
 
     if(WIN32)
-        set(BESPOKE_CUNEUS_IMPORT_LIBRARY "${BESPOKE_CUNEUS_CARGO_TARGET_DIR}/release/cuneus.dll.lib")
-        set(BESPOKE_CUNEUS_RUNTIME_LIBRARY "${BESPOKE_CUNEUS_CARGO_TARGET_DIR}/release/cuneus.dll")
-        set(BESPOKE_CUNEUS_LINK_LIBRARY "${BESPOKE_CUNEUS_IMPORT_LIBRARY}")
-        set(BESPOKE_CUNEUS_EXECUTABLE_SUFFIX ".exe")
+        set(BESPOKE_ACUNEUS_IMPORT_LIBRARY "${BESPOKE_ACUNEUS_CARGO_TARGET_DIR}/release/acuneus.dll.lib")
+        set(BESPOKE_ACUNEUS_RUNTIME_LIBRARY "${BESPOKE_ACUNEUS_CARGO_TARGET_DIR}/release/acuneus.dll")
+        set(BESPOKE_ACUNEUS_EXECUTABLE_SUFFIX ".exe")
+        set(BESPOKE_ACUNEUS_LINK_LIBRARY "${BESPOKE_ACUNEUS_IMPORT_LIBRARY}")
     elseif(APPLE)
-        set(BESPOKE_CUNEUS_RUNTIME_LIBRARY "${BESPOKE_CUNEUS_CARGO_TARGET_DIR}/release/libcuneus.dylib")
-        set(BESPOKE_CUNEUS_LINK_LIBRARY "${BESPOKE_CUNEUS_RUNTIME_LIBRARY}")
-        set(BESPOKE_CUNEUS_EXECUTABLE_SUFFIX "")
+        set(BESPOKE_ACUNEUS_RUNTIME_LIBRARY "${BESPOKE_ACUNEUS_CARGO_TARGET_DIR}/release/libacuneus.dylib")
+        set(BESPOKE_ACUNEUS_EXECUTABLE_SUFFIX "")
+        set(BESPOKE_ACUNEUS_LINK_LIBRARY "${BESPOKE_ACUNEUS_RUNTIME_LIBRARY}")
     else()
-        set(BESPOKE_CUNEUS_RUNTIME_LIBRARY "${BESPOKE_CUNEUS_CARGO_TARGET_DIR}/release/libcuneus.so")
-        set(BESPOKE_CUNEUS_LINK_LIBRARY "${BESPOKE_CUNEUS_RUNTIME_LIBRARY}")
-        set(BESPOKE_CUNEUS_EXECUTABLE_SUFFIX "")
+        set(BESPOKE_ACUNEUS_RUNTIME_LIBRARY "${BESPOKE_ACUNEUS_CARGO_TARGET_DIR}/release/libacuneus.so")
+        set(BESPOKE_ACUNEUS_EXECUTABLE_SUFFIX "")
+        set(BESPOKE_ACUNEUS_LINK_LIBRARY "${BESPOKE_ACUNEUS_RUNTIME_LIBRARY}")
     endif()
 
-    set(BESPOKE_CUNEUS_EXECUTABLES "")
-    foreach(BESPOKE_CUNEUS_BIN IN LISTS BESPOKE_CUNEUS_BINS)
-        list(APPEND BESPOKE_CUNEUS_EXECUTABLES "${BESPOKE_CUNEUS_CARGO_TARGET_DIR}/release/${BESPOKE_CUNEUS_BIN}${BESPOKE_CUNEUS_EXECUTABLE_SUFFIX}")
+    set(BESPOKE_ACUNEUS_EXECUTABLES "")
+    foreach(BESPOKE_ACUNEUS_BIN IN LISTS BESPOKE_ACUNEUS_BINS)
+        list(APPEND BESPOKE_ACUNEUS_EXECUTABLES "${BESPOKE_ACUNEUS_CARGO_TARGET_DIR}/release/${BESPOKE_ACUNEUS_BIN}${BESPOKE_ACUNEUS_EXECUTABLE_SUFFIX}")
     endforeach()
 
-    set(BESPOKE_CUNEUS_OUTPUTS "${BESPOKE_CUNEUS_LINK_LIBRARY}" "${BESPOKE_CUNEUS_RUNTIME_LIBRARY}" ${BESPOKE_CUNEUS_EXECUTABLES})
-    list(REMOVE_DUPLICATES BESPOKE_CUNEUS_OUTPUTS)
+    set(BESPOKE_ACUNEUS_OUTPUTS "${BESPOKE_ACUNEUS_LINK_LIBRARY}" "${BESPOKE_ACUNEUS_RUNTIME_LIBRARY}" ${BESPOKE_ACUNEUS_EXECUTABLES})
+    list(REMOVE_DUPLICATES BESPOKE_ACUNEUS_OUTPUTS)
 
-    add_custom_command(
-        OUTPUT ${BESPOKE_CUNEUS_OUTPUTS}
-        COMMAND ${CMAKE_COMMAND} -E env "CARGO_TARGET_DIR=${BESPOKE_CUNEUS_CARGO_TARGET_DIR}" ${CARGO_EXECUTABLE} ${BESPOKE_CUNEUS_CARGO_ARGS}
-        WORKING_DIRECTORY "${BESPOKE_CUNEUS_ROOT}"
+    add_custom_target(acuneus_capi_build
+        COMMAND ${CMAKE_COMMAND} -E env "CARGO_TARGET_DIR=${BESPOKE_ACUNEUS_CARGO_TARGET_DIR}" "ACUNEUS_RUNNER_CONTENT=${BESPOKE_ACUNEUS_RUNNER_CONTENT}" ${CARGO_EXECUTABLE} ${BESPOKE_ACUNEUS_CARGO_ARGS}
+        BYPRODUCTS ${BESPOKE_ACUNEUS_OUTPUTS}
+        WORKING_DIRECTORY "${BESPOKE_ACUNEUS_ROOT}"
         VERBATIM
     )
-    add_custom_target(cuneus_capi_build DEPENDS ${BESPOKE_CUNEUS_OUTPUTS})
-    add_dependencies(BespokeSynth cuneus_capi_build)
+    add_dependencies(BespokeSynth acuneus_capi_build)
 
-    target_compile_definitions(BespokeSynth PRIVATE BESPOKE_CUNEUS_ENABLED=1)
-    target_include_directories(BespokeSynth PRIVATE "${BESPOKE_CUNEUS_ROOT}/include")
-    target_link_libraries(BespokeSynth PRIVATE "${BESPOKE_CUNEUS_LINK_LIBRARY}")
+    target_compile_definitions(BespokeSynth PRIVATE BESPOKE_ACUNEUS_ENABLED=1)
+    target_include_directories(BespokeSynth PRIVATE "${BESPOKE_ACUNEUS_ROOT}/include")
+    target_link_libraries(BespokeSynth PRIVATE "${BESPOKE_ACUNEUS_LINK_LIBRARY}")
 
-    add_custom_command(TARGET BespokeSynth POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different "${BESPOKE_CUNEUS_RUNTIME_LIBRARY}" "$<TARGET_FILE_DIR:BespokeSynth>"
+    add_custom_command(TARGET acuneus_capi_build POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:BespokeSynth>"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different "${BESPOKE_ACUNEUS_RUNTIME_LIBRARY}" "$<TARGET_FILE_DIR:BespokeSynth>"
         VERBATIM
     )
-    foreach(BESPOKE_CUNEUS_EXECUTABLE IN LISTS BESPOKE_CUNEUS_EXECUTABLES)
-        add_custom_command(TARGET BespokeSynth POST_BUILD
-            COMMAND ${CMAKE_COMMAND} -E copy_if_different "${BESPOKE_CUNEUS_EXECUTABLE}" "$<TARGET_FILE_DIR:BespokeSynth>"
+    foreach(BESPOKE_ACUNEUS_EXECUTABLE IN LISTS BESPOKE_ACUNEUS_EXECUTABLES)
+        add_custom_command(TARGET acuneus_capi_build POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different "${BESPOKE_ACUNEUS_EXECUTABLE}" "$<TARGET_FILE_DIR:BespokeSynth>"
             VERBATIM
         )
     endforeach()
 else()
-    target_compile_definitions(BespokeSynth PRIVATE BESPOKE_CUNEUS_ENABLED=0)
+    target_compile_definitions(BespokeSynth PRIVATE BESPOKE_ACUNEUS_ENABLED=0)
 endif()
 
 set(BESPOKE_STABLE_AUDIO_DEFAULT_ROOT "")
@@ -1008,7 +1035,7 @@ target_compile_definitions(BespokeSynth PRIVATE
 
     JUCE_ALSA=1
     JUCE_JACK=1
-    JUCE_JACK_CLIENT_NAME="BespokeSynth"
+    JUCE_JACK_CLIENT_NAME="BespokeSynth_gen"
 
     JUCE_WASAPI=1
     JUCE_DIRECTSOUND=1

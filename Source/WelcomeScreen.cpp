@@ -79,6 +79,16 @@ void WelcomeScreen::CreateUIControls()
    UIBLOCK(kSaveStateButtonStartX, 30);
    BUTTON(mNewPatchButton, "new patch");
    UIBLOCK_SHIFTRIGHT();
+   BUTTON(mAcuneusPatchButton, "acuneus");
+   UIBLOCK_SHIFTRIGHT();
+   BUTTON(mAcuneusStableAudioPatchButton, "acuneus/stableaudio");
+   UIBLOCK_SHIFTRIGHT();
+   BUTTON(mAcuneusCandleVideoPatchButton, "acuneus/candlevideo");
+   UIBLOCK_SHIFTRIGHT();
+   BUTTON(mAcuneusSynthPatchButton, "acuneus/synth");
+   UIBLOCK_SHIFTRIGHT();
+   BUTTON(mAcuneusYoutubePatchButton, "audio/video demo");
+   UIBLOCK_SHIFTRIGHT();
    BUTTON(mLoadPatchButton, "load patch");
    UIBLOCK_SHIFTRIGHT();
    BUTTON(mShowHelpButton, "help");
@@ -209,6 +219,11 @@ void WelcomeScreen::DrawModule()
    DrawTextBold("welcome to bespoke!", 15, 20, 18);
 
    mNewPatchButton->Draw();
+   mAcuneusPatchButton->Draw();
+   mAcuneusStableAudioPatchButton->Draw();
+   mAcuneusCandleVideoPatchButton->Draw();
+   mAcuneusSynthPatchButton->Draw();
+   mAcuneusYoutubePatchButton->Draw();
    mLoadPatchButton->Draw();
    mShowHelpButton->Draw();
    mShowSettingsButton->Draw();
@@ -297,6 +312,16 @@ void WelcomeScreen::ButtonClicked(ClickButton* button, double time)
       HelpDisplay::OpenDiscordLink();
    if (button == mNewPatchButton)
       TheSynth->ReloadInitialLayout();
+   if (button == mAcuneusPatchButton)
+      TheSynth->LoadAcuneusPatch();
+   if (button == mAcuneusStableAudioPatchButton)
+      TheSynth->LoadAcuneusStableAudioPatch();
+   if (button == mAcuneusCandleVideoPatchButton)
+      TheSynth->LoadAcuneusCandleVideoPatch();
+   if (button == mAcuneusSynthPatchButton)
+      TheSynth->LoadAcuneusSynthPatch();
+   if (button == mAcuneusYoutubePatchButton)
+      TheSynth->LoadAcuneusYoutubePatch();
    if (button == mLoadPatchButton)
       TheSynth->LoadStatePopup();
    if (button == mShowHelpButton)

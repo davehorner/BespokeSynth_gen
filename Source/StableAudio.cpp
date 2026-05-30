@@ -27,6 +27,7 @@
 #include "FileStream.h"
 #include "IAudioReceiver.h"
 #include "ModularSynth.h"
+#include "OllamaPromptGenerator.h"
 #include "Profiler.h"
 #include "Sample.h"
 #include "SynthGlobals.h"
@@ -54,6 +55,7 @@ extern "C" {
 #include <cstdlib>
 #include <random>
 #include <regex>
+#include <sstream>
 #include <vector>
 
 StableAudio::StableAudio()
@@ -75,6 +77,8 @@ StableAudio::StableAudio()
 
 StableAudio::~StableAudio()
 {
+   if (mPromptIdeasFuture.valid())
+      mPromptIdeasFuture.wait();
    if (mGenerationFuture.valid())
       mGenerationFuture.wait();
 
@@ -117,6 +121,9 @@ void StableAudio::CreateUIControls()
    BUTTON(mMoreIdeasButton, "more ideas...");
    UIBLOCK_SHIFTRIGHT();
    CHECKBOX(mAutoplayCheckbox, "auto gen", &mAutoplay);
+   UIBLOCK_SHIFTRIGHT();
+   TEXTENTRY(mOllamaModelEntry, "ollama", 20, &mOllamaModel);
+   mOllamaModelEntry->DrawLabel(true);
    UIBLOCK_NEWLINE();
    DROPDOWN(mModelDropdown, "model", &mModelSelection, 120);
    mModelDropdown->DrawLabel(true);
@@ -167,6 +174,40 @@ void StableAudio::Init()
    IDrawableModule::Init();
 }
 
+void StableAudio::EnableAutoGenerationPatch()
+{
+   mAutoplay = true;
+   mAutonext = true;
+   mLoop = true;
+   mPlay = true;
+   mVolume = std::max(mVolume, 1.0f);
+
+   if (mAutoplayCheckbox != nullptr)
+      mAutoplayCheckbox->SetValue(1.0f, gTime, false);
+   if (mAutonextCheckbox != nullptr)
+      mAutonextCheckbox->SetValue(1.0f, gTime, false);
+   if (mLoopCheckbox != nullptr)
+      mLoopCheckbox->SetValue(1.0f, gTime, false);
+   if (mVolumeSlider != nullptr)
+      mVolumeSlider->SetValue(mVolume, gTime, false);
+
+   if (!mGenerationInProgress)
+   {
+      bool hasSample = false;
+      {
+         std::lock_guard<std::mutex> sampleLock(mSampleMutex);
+         hasSample = mSample != nullptr;
+      }
+
+      if (hasSample)
+         ScheduleNextAutoplay();
+      else
+         AutoplayNextPrompt();
+   }
+
+   UpdatePlaybackControls();
+}
+
 void StableAudio::Poll()
 {
    IDrawableModule::Poll();
@@ -194,6 +235,14 @@ void StableAudio::Poll()
       }
    }
 
+   if (mPromptIdeasInProgress && mPromptIdeasFuture.valid() &&
+       mPromptIdeasFuture.wait_for(std::chrono::seconds(0)) == std::future_status::ready)
+   {
+      PromptIdeasResult result = mPromptIdeasFuture.get();
+      mPromptIdeasInProgress = false;
+      CompletePromptIdeas(std::move(result));
+   }
+
    if (mSyncTransport && mPendingTransportSyncTime > 0 && gTime >= mPendingTransportSyncTime)
    {
       SyncTransportToPromptBpm(mPendingTransportSyncPrompt);
@@ -207,7 +256,7 @@ void StableAudio::Poll()
       hasSample = mSample != nullptr;
    }
 
-   if (mAutoplay && !mGenerationInProgress && hasSample &&
+   if (mAutoplay && !mGenerationInProgress && !mPromptIdeasInProgress && hasSample &&
        mAutoplayNextGenerationTime > 0 && gTime >= mAutoplayNextGenerationTime)
    {
       AutoplayNextPrompt();
@@ -244,7 +293,7 @@ void StableAudio::Process(double time)
             mSample->SetPlayPosition(std::fmod(mSample->GetPlayPosition(), (double)mSample->LengthInSamples()));
 
          const double startPlayPosition = mSample->GetPlayPosition();
-         mSample->SetLooping(mLoop && !mAutonext && !useCrossfadeLoop);
+         mSample->SetLooping(mLoop && !useCrossfadeLoop);
          if (mSample->ConsumeData(time, &gWorkChannelBuffer, bufferSize, true))
          {
             if (useCrossfadeLoop)
@@ -284,8 +333,16 @@ void StableAudio::Process(double time)
          else
          {
             gWorkChannelBuffer.Clear();
-            mPlay = false;
-            mSample->SetPlayPosition(0);
+            if (mLoop && mSample->LengthInSamples() > 0)
+            {
+               mSample->SetPlayPosition(std::fmod(std::max(0.0, mSample->GetPlayPosition()), (double)mSample->LengthInSamples()));
+               mPlay = true;
+            }
+            else
+            {
+               mPlay = false;
+               mSample->SetPlayPosition(0);
+            }
          }
       }
       else
@@ -828,24 +885,109 @@ void StableAudio::GenerateMorePromptIdeas()
    if (mPromptDropdown == nullptr)
       return;
 
+   if (mPromptIdeasInProgress)
+   {
+      mStatusString += "ollama music prompt generator is already running\n";
+      ClampStatusScroll();
+      return;
+   }
+
    mPromptChoices.clear();
    mPromptDropdown->Clear();
    mPromptDropdown->SetUnknownItemString("choose prompt");
    mPromptChoice = -1;
 
-   for (int i = 0; i < 10; ++i)
-      AddPromptChoice(MakeGeneratedPromptIdea());
+   juce::String model(mOllamaModel);
+   model = model.trim();
+   if (!model.isEmpty())
+   {
+      const std::string modelText = model.toStdString();
+      const std::string prompt = mPrompt;
+      const std::string transportPrompt = GetTransportPromptFragment();
+      mStatusString += "running ollama music prompt generator...\n";
+      ClampStatusScroll();
+      mPromptIdeasInProgress = true;
+      mPromptIdeasFuture = std::async(std::launch::async, [modelText, prompt, transportPrompt]()
+      {
+         return GeneratePromptIdeasFromOllama(modelText, prompt, transportPrompt);
+      });
+      return;
+   }
 
-   mStatusString = "generated more prompt ideas";
+   CompletePromptIdeas({});
+}
+
+StableAudio::PromptIdeasResult StableAudio::GeneratePromptIdeasFromOllama(std::string model, std::string prompt, std::string transportPrompt)
+{
+   PromptIdeasResult promptResult;
+   const OllamaPromptGenerator::Result result = OllamaPromptGenerator::GenerateMusicPrompts(model, prompt, transportPrompt, 10);
+   if (!result.success)
+   {
+      promptResult.status += result.error + "\n";
+      if (!result.output.empty())
+         promptResult.status += result.output + "\n";
+      return promptResult;
+   }
+
+   promptResult.prompts = result.prompts;
+   promptResult.source = "ollama";
+   promptResult.success = !promptResult.prompts.empty();
+   if (!promptResult.success)
+      promptResult.status = "ollama returned no music prompt ideas\n";
+   return promptResult;
+}
+
+void StableAudio::CompletePromptIdeas(PromptIdeasResult result)
+{
+   if (!result.status.empty())
+      mStatusString += result.status;
+
+   int startIndex = (int)mPromptChoices.size();
+   if (result.success)
+   {
+      for (const auto& prompt : result.prompts)
+         AddPromptChoice(prompt);
+
+      if ((int)mPromptChoices.size() == startIndex)
+      {
+         mStatusString += "ollama returned only duplicate music prompt ideas\n";
+         result.success = false;
+      }
+      else
+      {
+         AppendPromptIdeasStatus(result.source.empty() ? "ollama" : result.source, startIndex);
+      }
+   }
+
+   if (!result.success)
+   {
+      startIndex = (int)mPromptChoices.size();
+      for (int i = 0; i < 10; ++i)
+         AddPromptChoice(MakeGeneratedPromptIdea());
+      AppendPromptIdeasStatus("built-in", startIndex);
+   }
+
+   if (mGenerateAfterPromptIdeas)
+      UseRandomPromptAndStartGeneration();
+   else if (!mPromptChoices.empty())
+      SelectPromptChoice(0);
 }
 
 void StableAudio::AutoplayNextPrompt()
 {
-   if (!mAutoplay || mGenerationInProgress)
+   if (!mAutoplay || mGenerationInProgress || mPromptIdeasInProgress)
       return;
 
+   mGenerateAfterPromptIdeas = true;
    GenerateMorePromptIdeas();
-   if (mPromptChoices.empty())
+   if (!mPromptIdeasInProgress)
+      UseRandomPromptAndStartGeneration();
+}
+
+void StableAudio::UseRandomPromptAndStartGeneration()
+{
+   mGenerateAfterPromptIdeas = false;
+   if (mPromptChoices.empty() || mGenerationInProgress)
       return;
 
    static std::mt19937 rng{ std::random_device{}() };
@@ -1012,6 +1154,33 @@ void StableAudio::AddPromptChoice(const std::string& prompt)
    if (label.length() > 70)
       label = label.substring(0, 70) + "...";
    mPromptDropdown->AddLabel(label.toStdString(), index);
+}
+
+void StableAudio::SelectPromptChoice(int index)
+{
+   if (index < 0 || index >= (int)mPromptChoices.size())
+      return;
+
+   if (mPromptDropdown != nullptr)
+      mPromptDropdown->SetValue(index, gTime, false);
+   else
+   {
+      mPromptChoice = index;
+      ApplyPromptChoice();
+   }
+}
+
+void StableAudio::AppendPromptIdeasStatus(const std::string& source, int startIndex)
+{
+   startIndex = std::clamp(startIndex, 0, (int)mPromptChoices.size());
+   const int addedCount = (int)mPromptChoices.size() - startIndex;
+   if (addedCount <= 0)
+      return;
+
+   mStatusString += "generated " + ofToString(addedCount) + " music prompt ideas from " + source + ":\n";
+   for (int i = startIndex; i < (int)mPromptChoices.size(); ++i)
+      mStatusString += ofToString(i - startIndex + 1) + ". " + mPromptChoices[i] + "\n";
+   ClampStatusScroll();
 }
 
 void StableAudio::ApplyPromptChoice()
@@ -1260,6 +1429,17 @@ void StableAudio::CheckboxUpdated(Checkbox* checkbox, double time)
          mAutoplayNextGenerationTime = -1;
    }
 
+   if (checkbox == mLoopCheckbox && mLoop)
+   {
+      std::lock_guard<std::mutex> sampleLock(mSampleMutex);
+      if (mSample != nullptr)
+      {
+         if (mSample->LengthInSamples() > 0 && mSample->GetPlayPosition() >= mSample->LengthInSamples())
+            mSample->SetPlayPosition(std::fmod(mSample->GetPlayPosition(), (double)mSample->LengthInSamples()));
+         mPlay = true;
+      }
+   }
+
    if (checkbox == mSyncTransportCheckbox && mSyncTransport)
       SyncTransportToPromptBpm();
 }
@@ -1439,6 +1619,7 @@ void StableAudio::DrawModule()
    mPromptDropdown->Draw();
    mMoreIdeasButton->Draw();
    mAutoplayCheckbox->Draw();
+   mOllamaModelEntry->Draw();
    if (mAutoplay)
    {
       std::string autoplayStatus = "next: queued";
@@ -1486,22 +1667,107 @@ void StableAudio::DrawModule()
    mDecoderPathEntry->Draw();
    mTextEncoderPathEntry->Draw();
 
+   ClampStatusScroll();
+   const ofRectangle statusRect = GetStatusRect();
+   const std::vector<std::string> lines = GetWrappedStatusLines();
+   constexpr int kStatusLineHeight = 11;
+
    ofPushStyle();
    ofFill();
    ofSetColor(255, 255, 255, 50);
-   ofRect(5, 142, mWidth - 10, 22);
+   ofRect(statusRect.x, statusRect.y, statusRect.width, statusRect.height);
    ofSetColor(40, 40, 40);
-
-   if (mGenerationInProgress)
-      DrawTextNormal("generating...", 10, 157, 9);
-   else if (!mStatusString.empty())
-      DrawTextNormal(mStatusString, 10, 157, 9);
-   else if (mSample != nullptr)
-      DrawTextNormal(mSample->Name(), 10, 157, 9);
-   else
-      DrawTextNormal(GetSelectedModelDescription(), 10, 157, 9);
-
+   ofClipWindow(statusRect.x, statusRect.y, statusRect.width, statusRect.height, true);
+   const int visibleLines = std::max(1, (int)statusRect.height / kStatusLineHeight);
+   for (int i = 0; i < visibleLines && mStatusScrollLine + i < (int)lines.size(); ++i)
+      DrawTextNormal(lines[mStatusScrollLine + i], statusRect.x + 5, statusRect.y + 12 + i * kStatusLineHeight, 9);
+   ofResetClipWindow();
    ofPopStyle();
+}
+
+void StableAudio::OnClicked(float x, float y, bool right)
+{
+   if (right && GetStatusRect().contains(x, y))
+   {
+      TheSynth->CopyTextToClipboard(GetStatusText());
+      return;
+   }
+
+   IDrawableModule::OnClicked(x, y, right);
+}
+
+bool StableAudio::MouseScrolled(float x, float y, float scrollX, float scrollY, bool isSmoothScroll, bool isInvertedScroll)
+{
+   if (!GetStatusRect().contains(x, y))
+      return false;
+
+   const int delta = (int)std::round(scrollX + scrollY);
+   if (delta == 0)
+      mStatusScrollLine += (scrollX + scrollY) > 0 ? -1 : 1;
+   else
+      mStatusScrollLine -= delta;
+   ClampStatusScroll();
+   return true;
+}
+
+ofRectangle StableAudio::GetStatusRect() const
+{
+   return ofRectangle(5, 142, mWidth - 10, std::max(22.0f, mHeight - 147));
+}
+
+std::string StableAudio::GetStatusText() const
+{
+   if (mGenerationInProgress)
+      return "generating...";
+   if (mPromptIdeasInProgress)
+      return mStatusString.empty() ? "generating prompt ideas..." : mStatusString;
+   if (!mStatusString.empty())
+      return mStatusString;
+   if (mSample != nullptr)
+      return mSample->Name();
+   return GetSelectedModelDescription();
+}
+
+std::vector<std::string> StableAudio::GetWrappedStatusLines() const
+{
+   const std::string text = GetStatusText();
+   const float maxWidth = GetStatusRect().width - 10;
+   constexpr float kTextSize = 9;
+   std::vector<std::string> lines;
+   std::stringstream paragraphs(text);
+   std::string paragraph;
+
+   while (std::getline(paragraphs, paragraph))
+   {
+      std::stringstream words(paragraph);
+      std::string word;
+      std::string line;
+      while (words >> word)
+      {
+         std::string candidate = line.empty() ? word : line + " " + word;
+         if (!line.empty() && GetStringWidth(candidate, kTextSize) > maxWidth)
+         {
+            lines.push_back(line);
+            line = word;
+         }
+         else
+         {
+            line = candidate;
+         }
+      }
+      lines.push_back(line);
+   }
+
+   if (lines.empty())
+      lines.push_back("");
+   return lines;
+}
+
+void StableAudio::ClampStatusScroll()
+{
+   const int visibleLines = std::max(1, (int)GetStatusRect().height / 11);
+   const int maxScroll = std::max(0, (int)GetWrappedStatusLines().size() - visibleLines);
+   mStatusScrollLine = std::clamp(mStatusScrollLine, 0, maxScroll);
 }
 
 void StableAudio::LoadLayout(const ofxJSONElement& moduleInfo)
@@ -1532,6 +1798,7 @@ void StableAudio::SaveState(FileStreamOut& out)
    out << mCrossfadeSeconds;
    out << mSyncTransport;
    out << mAutonext;
+   out << std::string(mOllamaModelEntry != nullptr ? mOllamaModelEntry->GetText() : mOllamaModel);
 }
 
 void StableAudio::LoadState(FileStreamIn& in, int rev)
@@ -1577,6 +1844,13 @@ void StableAudio::LoadState(FileStreamIn& in, int rev)
       in >> mSyncTransport;
    if (rev >= 6)
       in >> mAutonext;
+   if (rev >= 7)
+      in >> mOllamaModel;
+   if (mOllamaModelEntry != nullptr)
+   {
+      mOllamaModelEntry->SetText(mOllamaModel);
+      mOllamaModelEntry->UpdateDisplayString();
+   }
    UpdateCrossfadeSlider();
 
    RefreshGeneratedWavList();

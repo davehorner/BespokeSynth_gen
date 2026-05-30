@@ -39,6 +39,7 @@ class IFloatSliderListener
 public:
    virtual ~IFloatSliderListener() {}
    virtual void FloatSliderUpdated(FloatSlider* slider, float oldVal, double time) = 0;
+   virtual bool FloatSliderContextMenu(FloatSlider* slider) { return false; }
 };
 
 class FloatSlider : public IUIControl, public ITextEntryListener, public IAudioPoller

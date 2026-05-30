@@ -92,6 +92,11 @@ private:
    ClickButton* mDocsLinkButton{ nullptr };
    ClickButton* mDiscordLinkButton{ nullptr };
    ClickButton* mNewPatchButton{ nullptr };
+   ClickButton* mAcuneusPatchButton{ nullptr };
+   ClickButton* mAcuneusStableAudioPatchButton{ nullptr };
+   ClickButton* mAcuneusCandleVideoPatchButton{ nullptr };
+   ClickButton* mAcuneusSynthPatchButton{ nullptr };
+   ClickButton* mAcuneusYoutubePatchButton{ nullptr };
    ClickButton* mLoadPatchButton{ nullptr };
    ClickButton* mShowHelpButton{ nullptr };
    ClickButton* mShowSettingsButton{ nullptr };

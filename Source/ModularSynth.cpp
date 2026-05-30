@@ -23,6 +23,9 @@
 #include "FileStream.h"
 #include "PatchCable.h"
 #include "ADSRDisplay.h"
+#include "Acuneus.h"
+#include "CandleVideo.h"
+#include "StableAudio.h"
 #include "QuickSpawnMenu.h"
 #include "AudioToCV.h"
 #include "ScriptModule.h"
@@ -365,6 +368,160 @@ void ModularSynth::Poll()
       {
          LoadLayoutFromFile(ofToDataPath(UserPrefs.layout.Get()));
          mWantReloadInitialLayout = false;
+      }
+
+      if (mWantLoadAcuneusPatch)
+      {
+         LoadLayoutFromFile(ofToDataPath(UserPrefs.layout.Get()));
+         ModuleFactory::Spawnable spawnable;
+         spawnable.mLabel = "acuneus";
+         if (auto* acuneus = dynamic_cast<Acuneus*>(SpawnModuleOnTheFly(spawnable, 40, 120)))
+            acuneus->OpenInstance();
+         mWantLoadAcuneusPatch = false;
+      }
+
+      if (mWantLoadAcuneusStableAudioPatch)
+      {
+         LoadLayoutFromFile(ofToDataPath(UserPrefs.layout.Get()));
+
+         ModuleFactory::Spawnable stableAudioSpawnable;
+         stableAudioSpawnable.mLabel = "stableaudio";
+         auto* stableAudio = dynamic_cast<StableAudio*>(SpawnModuleOnTheFly(stableAudioSpawnable, 40, 120));
+
+         ModuleFactory::Spawnable acuneusSpawnable;
+         acuneusSpawnable.mLabel = "acuneus";
+         auto* acuneus = dynamic_cast<Acuneus*>(SpawnModuleOnTheFly(acuneusSpawnable, 650, 120));
+         if (acuneus != nullptr)
+            acuneus->SetSelectedBinName("audiovis");
+
+         ModuleFactory::Spawnable gainSpawnable;
+         gainSpawnable.mLabel = "gain";
+         auto* gain = SpawnModuleOnTheFly(gainSpawnable, 1020, 120);
+
+         ModuleFactory::Spawnable outputSpawnable;
+         outputSpawnable.mLabel = "output";
+         auto* output = SpawnModuleOnTheFly(outputSpawnable, 1160, 120);
+
+         if (stableAudio != nullptr && acuneus != nullptr)
+            stableAudio->GetPatchCableSource()->SetTarget(acuneus);
+         if (acuneus != nullptr && gain != nullptr)
+            acuneus->GetPatchCableSource()->SetTarget(gain);
+         if (gain != nullptr && output != nullptr)
+            gain->GetPatchCableSource()->SetTarget(output);
+         if (acuneus != nullptr)
+         {
+            acuneus->EnableMusicAutomation(true);
+            acuneus->OpenInstance();
+         }
+         if (stableAudio != nullptr)
+            stableAudio->EnableAutoGenerationPatch();
+
+         mWantLoadAcuneusStableAudioPatch = false;
+      }
+
+      if (mWantLoadAcuneusCandleVideoPatch)
+      {
+         LoadLayoutFromFile(ofToDataPath(UserPrefs.layout.Get()));
+
+         ModuleFactory::Spawnable candleVideoSpawnable;
+         candleVideoSpawnable.mLabel = "candlevideo";
+         auto* candleVideo = dynamic_cast<CandleVideo*>(SpawnModuleOnTheFly(candleVideoSpawnable, 40, 120));
+
+         ModuleFactory::Spawnable acuneusSpawnable;
+         acuneusSpawnable.mLabel = "acuneus";
+         auto* acuneus = dynamic_cast<Acuneus*>(SpawnModuleOnTheFly(acuneusSpawnable, 690, 120));
+         if (acuneus != nullptr)
+            acuneus->SetSelectedBinName("voronoi");
+
+         if (candleVideo != nullptr && acuneus != nullptr)
+            candleVideo->GetPatchCableSource()->SetTarget(acuneus);
+         if (candleVideo != nullptr)
+            candleVideo->EnableAutoLoadPatch();
+         if (acuneus != nullptr)
+            acuneus->OpenInstance();
+
+         mWantLoadAcuneusCandleVideoPatch = false;
+      }
+
+      if (mWantLoadAcuneusSynthPatch)
+      {
+         LoadLayoutFromFile(ofToDataPath(UserPrefs.layout.Get()));
+
+         ModuleFactory::Spawnable keyboardSpawnable;
+         keyboardSpawnable.mLabel = "keyboarddisplay";
+         auto* keyboard = SpawnModuleOnTheFly(keyboardSpawnable, 40, 120);
+
+         ModuleFactory::Spawnable acuneusSpawnable;
+         acuneusSpawnable.mLabel = "acuneus";
+         auto* acuneus = dynamic_cast<Acuneus*>(SpawnModuleOnTheFly(acuneusSpawnable, 650, 120));
+         if (acuneus != nullptr)
+            acuneus->SetSelectedBinName("synth");
+
+         ModuleFactory::Spawnable gainSpawnable;
+         gainSpawnable.mLabel = "gain";
+         auto* gain = SpawnModuleOnTheFly(gainSpawnable, 1020, 120);
+
+         ModuleFactory::Spawnable outputSpawnable;
+         outputSpawnable.mLabel = "output";
+         auto* output = SpawnModuleOnTheFly(outputSpawnable, 1160, 120);
+
+         if (keyboard != nullptr && acuneus != nullptr)
+            keyboard->GetPatchCableSource()->SetTarget(acuneus);
+         if (acuneus != nullptr && gain != nullptr)
+            acuneus->GetPatchCableSource()->SetTarget(gain);
+         if (gain != nullptr && output != nullptr)
+            gain->GetPatchCableSource()->SetTarget(output);
+         if (acuneus != nullptr)
+            acuneus->OpenInstance();
+
+         mWantLoadAcuneusSynthPatch = false;
+      }
+
+      if (mWantLoadAcuneusYoutubePatch)
+      {
+         LoadLayoutFromFile(ofToDataPath(UserPrefs.layout.Get()));
+
+         ModuleFactory::Spawnable stableAudioSpawnable;
+         stableAudioSpawnable.mLabel = "stableaudio";
+         auto* stableAudio = dynamic_cast<StableAudio*>(SpawnModuleOnTheFly(stableAudioSpawnable, 40, 120));
+
+         ModuleFactory::Spawnable candleVideoSpawnable;
+         candleVideoSpawnable.mLabel = "candlevideo";
+         auto* candleVideo = dynamic_cast<CandleVideo*>(SpawnModuleOnTheFly(candleVideoSpawnable, 40, 360));
+
+         ModuleFactory::Spawnable acuneusSpawnable;
+         acuneusSpawnable.mLabel = "acuneus";
+         auto* acuneus = dynamic_cast<Acuneus*>(SpawnModuleOnTheFly(acuneusSpawnable, 700, 120));
+
+         ModuleFactory::Spawnable gainSpawnable;
+         gainSpawnable.mLabel = "gain";
+         auto* gain = SpawnModuleOnTheFly(gainSpawnable, 1070, 120);
+
+         ModuleFactory::Spawnable outputSpawnable;
+         outputSpawnable.mLabel = "output";
+         auto* output = SpawnModuleOnTheFly(outputSpawnable, 1210, 120);
+
+         if (stableAudio != nullptr && acuneus != nullptr)
+            stableAudio->GetPatchCableSource()->SetTarget(acuneus);
+         if (candleVideo != nullptr && acuneus != nullptr)
+            candleVideo->GetPatchCableSource()->SetTarget(acuneus);
+         if (acuneus != nullptr && gain != nullptr)
+            acuneus->GetPatchCableSource()->SetTarget(gain);
+         if (gain != nullptr && output != nullptr)
+            gain->GetPatchCableSource()->SetTarget(output);
+
+         if (acuneus != nullptr)
+         {
+            acuneus->SetSelectedBinName("voronoi");
+            acuneus->EnableMusicAutomation(true);
+            acuneus->OpenInstance();
+         }
+         if (stableAudio != nullptr)
+            stableAudio->EnableAutoGenerationPatch();
+         if (candleVideo != nullptr)
+            candleVideo->EnableAutoLoadPatch();
+
+         mWantLoadAcuneusYoutubePatch = false;
       }
    }
 

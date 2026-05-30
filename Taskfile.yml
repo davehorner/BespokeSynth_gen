@@ -6,20 +6,60 @@ vars:
   # For Windows MSVC generator:
   VS_GEN: 'Visual Studio 17 2022'
   VS_ARCH: 'x64'
+  ACUNEUS_REPO: 'https://github.com/davehorner/acuneus.git'
+  ACUNEUS_REF: 'bb42f21a473ce045d77775bc4ed97846896f5c8a'
+  STABLE_AUDIO_REPO: 'https://github.com/davehorner/stableaudio-rs.git'
+  STABLE_AUDIO_REF: '9bbacd4d83ab147ad7a3fc8d2c343e9e081c021e'
+  CANDLE_VIDEO_REPO: 'https://github.com/davehorner/candle-video.git'
+  CANDLE_VIDEO_REF: 'b9a853b70d8d857462922bd7d847ccb116138b91'
 
 tasks:
 
   default:
     desc: Build BespokeSynth (configure + compile)
-    deps: [submodules]
+    deps: [setup]
     cmds:
       - task: configure
       - task: build
+
+  setup:
+    desc: Init / update BespokeSynth_gen dependencies
+    cmds:
+      - task: submodules
+      - task: rust:deps
 
   submodules:
     desc: Init / update git submodules recursively
     cmds:
       - git submodule update --init --recursive
+
+  rust:deps:
+    desc: Clone / update pinned Rust dependency checkouts
+    cmds:
+      - task: rust:deps:windows
+      - task: rust:deps:posix
+    silent: true
+
+  rust:deps:windows:
+    platforms: [windows]
+    cmds:
+      - >
+        powershell -NoProfile -ExecutionPolicy Bypass -File scripts/setup-rust-deps.ps1
+        -AcuneusRepo "{{.ACUNEUS_REPO}}"
+        -AcuneusRef "{{.ACUNEUS_REF}}"
+        -StableAudioRepo "{{.STABLE_AUDIO_REPO}}"
+        -StableAudioRef "{{.STABLE_AUDIO_REF}}"
+        -CandleVideoRepo "{{.CANDLE_VIDEO_REPO}}"
+        -CandleVideoRef "{{.CANDLE_VIDEO_REF}}"
+
+  rust:deps:posix:
+    platforms: [linux, darwin]
+    cmds:
+      - >
+        sh scripts/setup-rust-deps.sh
+        "{{.ACUNEUS_REPO}}" "{{.ACUNEUS_REF}}"
+        "{{.STABLE_AUDIO_REPO}}" "{{.STABLE_AUDIO_REF}}"
+        "{{.CANDLE_VIDEO_REPO}}" "{{.CANDLE_VIDEO_REF}}"
 
   # -------------------------------
   # Install: meta helpers

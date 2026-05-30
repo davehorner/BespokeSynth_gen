@@ -40,6 +40,9 @@ Release/Bespoke.app/*
 ## Build generated
 DerivedData/
 
+# Rust dependency checkouts created by `task setup`.
+/libs/rust/
+
 ## Various settings
 *.pbxuser
 !default.pbxuser

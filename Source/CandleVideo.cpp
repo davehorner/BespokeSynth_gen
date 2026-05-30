@@ -30,6 +30,10 @@
 #include <random>
 #include <sstream>
 
+#ifndef BESPOKE_CANDLE_VIDEO_DEFAULT_ROOT
+#define BESPOKE_CANDLE_VIDEO_DEFAULT_ROOT ""
+#endif
+
 namespace
 {
 std::string FormatCommandLine(const juce::StringArray& args);
@@ -459,9 +463,10 @@ std::string CandleVideo::GetGeneratedVideoDirectory() const
 
 std::string CandleVideo::GetDefaultRoot() const
 {
-   if (juce::File("R:/w/rust/candle-video/Cargo.toml").existsAsFile())
-      return "R:/w/rust/candle-video";
-   return "R:/w/rust/candle-video";
+   const juce::File configuredRoot(BESPOKE_CANDLE_VIDEO_DEFAULT_ROOT);
+   if (configuredRoot.getChildFile("Cargo.toml").existsAsFile())
+      return configuredRoot.getFullPathName().replace("\\", "/").toStdString();
+   return "libs/rust/candle-video";
 }
 
 std::string CandleVideo::GetDefaultWeights() const

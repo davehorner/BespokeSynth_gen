@@ -53,10 +53,19 @@ The fork identifies itself as `BespokeSynth_gen` at the CMake project and JUCE p
 
 The main local integrations are:
 
-* `R:\w\rust\c` for the Acuneus runtime and C ABI
-* `R:\w\rust\candle-video` for the Candle LTX video generator
+* `libs/rust/acuneus` for the Acuneus runtime and C ABI
+* `libs/rust/candle-video` for the Candle LTX video generator
+* `libs/rust/stableaudio-rs` for the StableAudio C API
 * local StableAudio model directories selected by CMake when available
 * optional Ollama at `127.0.0.1:11434` for prompt ideas
+
+Initialize the Rust integrations with:
+
+```text
+task setup
+```
+
+`task setup` initializes the normal Bespoke submodules and clones the Rust integrations at the pinned commits listed in `Taskfile.yml`. CMake uses those local checkouts when present; if one is missing, configure prints a `task setup` reminder instead of cloning during configure.
 
 ### Acuneus / StableAudio Visualizer
 
@@ -74,7 +83,7 @@ The `acuneus/candlevideo` welcome shortcut creates:
 candlevideo -> acuneus/voronoi
 ```
 
-The CandleVideo node runs the local `R:\w\rust\candle-video` LTX video generator, writes MP4 files under Bespoke's `candlevideo/<module-name>` data folder, and autoloads the generated `video.mp4` into the connected Acuneus module's media path. The node defaults to the local LTX 0.9.8 distilled weights in `R:\w\rust\candle-video\models\ltx-video` and uses the `flash-attn` Cargo feature by default; clear or change its Cargo features field if the local generator should run with different Candle features.
+The CandleVideo node runs the local `libs/rust/candle-video` LTX video generator, writes MP4 files under Bespoke's `candlevideo/<module-name>` data folder, and autoloads the generated `video.mp4` into the connected Acuneus module's media path. The node defaults to the local LTX 0.9.8 distilled weights in `libs/rust/candle-video/models/ltx-video` and uses the `flash-attn` Cargo feature by default; clear or change its Cargo features field if the local generator should run with different Candle features.
 
 The `audio/video demo` welcome shortcut creates a combined generative patch:
 
@@ -93,7 +102,7 @@ keyboarddisplay -> acuneus/synth -> gain -> output
 
 The keyboard sends notes to the Acuneus GPU synth. The synth sends PCM feedback back to Bespoke, and Bespoke plays it from the Acuneus audio output cable. Generated boolean params are shown as checkboxes; for the synth this includes `Local Audio`, which lets the synth process play through its own audio device in addition to Bespoke's routed output.
 
-The Acuneus runtime and C ABI live in `R:\w\rust\c`. The Bespoke-side module is implemented in `Source/Acuneus.cpp` and `Source/Acuneus.h`.
+The Acuneus runtime and C ABI live in `libs/rust/acuneus`. The Bespoke-side module is implemented in `Source/Acuneus.cpp` and `Source/Acuneus.h`.
 
 
 ### License

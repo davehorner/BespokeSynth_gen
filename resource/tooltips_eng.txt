@@ -1273,7 +1273,7 @@ candlevideo~generate an MP4 from a text prompt using the local Candle LTX video 
 ~width~generated video width; CandleVideo rounds to a multiple of 32.
 ~height~generated video height; CandleVideo rounds to a multiple of 32.
 ~frames~number of frames to generate; values above 1 are rounded to the 8n+1 pattern expected by LTX video.
-~features~Cargo features passed to the CandleVideo example, such as gpu.
+~features~Cargo features passed to the CandleVideo example. macOS defaults to accelerate; CUDA features such as flash-attn or gpu require the NVIDIA CUDA toolkit.
 ~duration~target length, in seconds, for the next generated WAV.
 ~steps~number of diffusion steps used for generation. Higher values may improve quality but take longer.
 ~seed~random seed for generation. Reusing the same seed with the same settings should make results more repeatable.

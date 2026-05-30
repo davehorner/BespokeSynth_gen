@@ -34,6 +34,10 @@
 #define BESPOKE_CANDLE_VIDEO_DEFAULT_ROOT ""
 #endif
 
+#ifndef BESPOKE_CANDLE_VIDEO_DEFAULT_WEIGHTS
+#define BESPOKE_CANDLE_VIDEO_DEFAULT_WEIGHTS ""
+#endif
+
 namespace
 {
 std::string FormatCommandLine(const juce::StringArray& args);
@@ -471,6 +475,14 @@ std::string CandleVideo::GetDefaultRoot() const
 
 std::string CandleVideo::GetDefaultWeights() const
 {
+   const juce::File configuredWeights(BESPOKE_CANDLE_VIDEO_DEFAULT_WEIGHTS);
+   if (configuredWeights.exists())
+      return configuredWeights.getFullPathName().replace("\\", "/").toStdString();
+
+   const std::string topLevelWeights = "models/ltx-video";
+   if (juce::File(topLevelWeights).exists())
+      return topLevelWeights;
+
    const std::string defaultWeights = GetDefaultRoot() + "/models/ltx-video";
    if (juce::File(defaultWeights).exists())
       return defaultWeights;

@@ -56,7 +56,7 @@ The main local integrations are:
 * `libs/rust/acuneus` for the Acuneus runtime and C ABI
 * `libs/rust/candle-video` for the Candle LTX video generator
 * `libs/rust/stableaudio-rs` for the StableAudio C API
-* local StableAudio model directories selected by CMake when available
+* local StableAudio and CandleVideo model directories under top-level `models/`
 * optional Ollama at `127.0.0.1:11434` for prompt ideas
 
 Initialize the Rust integrations with:
@@ -83,7 +83,15 @@ The `acuneus/candlevideo` welcome shortcut creates:
 candlevideo -> acuneus/voronoi
 ```
 
-The CandleVideo node runs the local `libs/rust/candle-video` LTX video generator, writes MP4 files under Bespoke's `candlevideo/<module-name>` data folder, and autoloads the generated `video.mp4` into the connected Acuneus module's media path. The node defaults to the local LTX 0.9.8 distilled weights in `libs/rust/candle-video/models/ltx-video` and uses the `flash-attn` Cargo feature by default; clear or change its Cargo features field if the local generator should run with different Candle features.
+The CandleVideo node runs the local `libs/rust/candle-video` LTX video generator, writes MP4 files under Bespoke's `candlevideo/<module-name>` data folder, and autoloads the generated `video.mp4` into the connected Acuneus module's media path. The node defaults to the local LTX 0.9.8 distilled weights in `models/ltx-video`. Its Cargo features field defaults to `accelerate` on macOS and empty elsewhere; use CUDA-only features such as `flash-attn` or `gpu` only on systems with the NVIDIA CUDA toolkit available.
+
+Download StableAudio and CandleVideo model weights before configuring/building with:
+
+```bash
+task rust:models
+```
+
+This stores StableAudio GGUF files under `models/gguf-q8_0` and CandleVideo LTX files under `models/ltx-video`.
 
 The `audio/video demo` welcome shortcut creates a combined generative patch:
 

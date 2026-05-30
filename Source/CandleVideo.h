@@ -26,6 +26,14 @@
 #include <string>
 #include <vector>
 
+#ifndef BESPOKE_CANDLE_VIDEO_DEFAULT_FEATURES
+#if defined(__APPLE__)
+#define BESPOKE_CANDLE_VIDEO_DEFAULT_FEATURES "accelerate"
+#else
+#define BESPOKE_CANDLE_VIDEO_DEFAULT_FEATURES ""
+#endif
+#endif
+
 class Acuneus;
 class IAudioReceiver;
 
@@ -157,7 +165,7 @@ private:
    std::string mPrompt{ "A neon modular synthesizer patch generating glowing waveforms, cinematic, high contrast" };
    std::string mRoot;
    std::string mWeights;
-   std::string mCargoFeatures{ "flash-attn" };
+   std::string mCargoFeatures{ BESPOKE_CANDLE_VIDEO_DEFAULT_FEATURES };
    std::string mOllamaModel{ "llama3.2" };
    std::string mPromptCommand;
    std::string mVersion{ "0.9.8-2b-distilled" };

@@ -43,6 +43,9 @@ DerivedData/
 # Rust dependency checkouts created by `task setup`.
 /libs/rust/
 
+# Large local model weights created by `task rust:models`.
+/models/
+
 ## Various settings
 *.pbxuser
 !default.pbxuser

@@ -40,6 +40,23 @@ tasks:
       - task: rust:deps:posix
     silent: true
 
+  rust:models:
+    desc: Download StableAudio and CandleVideo model weights into top-level models/
+    cmds:
+      - task: rust:models:windows
+      - task: rust:models:posix
+    silent: true
+
+  rust:models:windows:
+    platforms: [windows]
+    cmds:
+      - powershell -NoProfile -ExecutionPolicy Bypass -File scripts/download-rust-models.ps1
+
+  rust:models:posix:
+    platforms: [linux, darwin]
+    cmds:
+      - sh scripts/download-rust-models.sh
+
   rust:deps:windows:
     platforms: [windows]
     cmds:
@@ -224,7 +241,8 @@ tasks:
     platforms: [linux, darwin]
     cmds:
       - |
-        BIN="{{.BUILD_DIR}}/Bespoke/BespokeSynth_gen"
+        BIN="{{.BUILD_DIR}}/Source/BespokeSynth_artefacts/{{.CONFIG}}/BespokeSynth_gen.app/Contents/MacOS/BespokeSynth_gen"
+        [ -x "$BIN" ] || BIN="{{.BUILD_DIR}}/Bespoke/BespokeSynth_gen"
         [ -x "$BIN" ] || BIN="{{.BUILD_DIR}}/BespokeSynth_gen"
         if [ -x "$BIN" ]; then
           "$BIN"

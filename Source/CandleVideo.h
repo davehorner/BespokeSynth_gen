@@ -29,6 +29,8 @@
 #ifndef BESPOKE_CANDLE_VIDEO_DEFAULT_FEATURES
 #if defined(__APPLE__)
 #define BESPOKE_CANDLE_VIDEO_DEFAULT_FEATURES "accelerate"
+#elif defined(_WIN32)
+#define BESPOKE_CANDLE_VIDEO_DEFAULT_FEATURES "flash-attn"
 #else
 #define BESPOKE_CANDLE_VIDEO_DEFAULT_FEATURES ""
 #endif

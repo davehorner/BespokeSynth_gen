@@ -65,7 +65,7 @@ Initialize the Rust integrations with:
 task setup
 ```
 
-`task setup` initializes the normal Bespoke submodules and clones the Rust integrations at the pinned commits listed in `Taskfile.yml`. CMake uses those local checkouts when present; if one is missing, configure prints a `task setup` reminder instead of cloning during configure.
+`task setup` initializes the normal Bespoke submodules and clones or updates the Rust integrations from the refs listed in `Taskfile.yml` (currently `main`). CMake uses those local checkouts when present; if one is missing, configure prints a `task setup` reminder instead of cloning during configure.
 
 ### Acuneus / StableAudio Visualizer
 
@@ -83,7 +83,7 @@ The `acuneus/candlevideo` welcome shortcut creates:
 candlevideo -> acuneus/voronoi
 ```
 
-The CandleVideo node runs the local `libs/rust/candle-video` LTX video generator, writes MP4 files under Bespoke's `candlevideo/<module-name>` data folder, and autoloads the generated `video.mp4` into the connected Acuneus module's media path. The node defaults to the local LTX 0.9.8 distilled weights in `models/ltx-video`. Its Cargo features field defaults to `accelerate` on macOS and empty elsewhere; use CUDA-only features such as `flash-attn` or `gpu` only on systems with the NVIDIA CUDA toolkit available.
+The CandleVideo node runs the local `libs/rust/candle-video` LTX video generator, writes MP4 files under Bespoke's `candlevideo/<module-name>` data folder, and autoloads the generated `video.mp4` into the connected Acuneus module's media path. The node defaults to the local LTX 0.9.8 distilled weights in `models/ltx-video`. Its Cargo features field defaults to `flash-attn` on Windows, `accelerate` on macOS, and empty elsewhere; change it if the local generator should use a different Candle backend.
 
 Download StableAudio and CandleVideo model weights before configuring/building with:
 
@@ -137,11 +137,11 @@ executable which is ready to run on your system in many cases. If your system do
 git clone https://github.com/BespokeSynth/BespokeSynth   # replace this with your fork if you forked
 cd BespokeSynth
 git submodule update --init --recursive
-cmake -Bignore/build -DCMAKE_BUILD_TYPE=Release
-cmake --build ignore/build --parallel 4 --config Release
+cmake -Bi/build -DCMAKE_BUILD_TYPE=Release
+cmake --build i/build --parallel 4 --config Release
 ```
 
-This will produce a release build in `ignore/build/Source/BespokeSynth_artefacts`.
+This will produce a release build in `i/build/Source/BespokeSynth_artefacts`.
 
 There are a few useful options to the *first* cmake command which many folks choose to use.
 
@@ -155,9 +155,9 @@ There are a few useful options to the *first* cmake command which many folks cho
 * `-GXcode` (mac only) will eject xcode project files rather than the default make files
 * `-DCMAKE_INSTALL_PREFIX=/usr` (only used on Linux) will set the `CMAKE_INSTALL_PREFIX` which guides both where your
   built bespoke looks for resources and also where it installs. After a build on Linux with this configured, you can
-  do `sudo cmake --install ignore/build` and bespoke will install correctly into this directory. The cmake default is `/usr/local`.
+  do `sudo cmake --install i/build` and bespoke will install correctly into this directory. The cmake default is `/usr/local`.
 
-The directory name `ignore/build` is arbitrary. Bespoke is set up to `.gitignore` everything in the `ignore` directory but you
+The directory name `i/build` is arbitrary. Bespoke is set up to `.gitignore` the `i` build directory but you
 can use any directory name you want for a build or have multiple builds also.
 
 For building on Linux, you can also use [`just`](https://github.com/casey/just) to build by running `just build`. Use `just list` to see other options available with `just`.

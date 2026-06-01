@@ -1,17 +1,17 @@
 version: "3"
 
 vars:
-  BUILD_DIR: '{{default "ignore/build" .BUILD_DIR}}'
+  BUILD_DIR: '{{default "i/build" .BUILD_DIR}}'
   CONFIG: '{{default "Release" .CONFIG}}'
   # For Windows MSVC generator:
   VS_GEN: 'Visual Studio 17 2022'
   VS_ARCH: 'x64'
   ACUNEUS_REPO: 'https://github.com/davehorner/acuneus.git'
-  ACUNEUS_REF: 'bb42f21a473ce045d77775bc4ed97846896f5c8a'
+  ACUNEUS_REF: 'main'
   STABLE_AUDIO_REPO: 'https://github.com/davehorner/stableaudio-rs.git'
-  STABLE_AUDIO_REF: '9bbacd4d83ab147ad7a3fc8d2c343e9e081c021e'
+  STABLE_AUDIO_REF: 'main'
   CANDLE_VIDEO_REPO: 'https://github.com/davehorner/candle-video.git'
-  CANDLE_VIDEO_REF: 'b9a853b70d8d857462922bd7d847ccb116138b91'
+  CANDLE_VIDEO_REF: 'main'
 
 tasks:
 
@@ -34,7 +34,7 @@ tasks:
       - git submodule update --init --recursive
 
   rust:deps:
-    desc: Clone / update pinned Rust dependency checkouts
+    desc: Clone / update Rust dependency checkouts
     cmds:
       - task: rust:deps:windows
       - task: rust:deps:posix

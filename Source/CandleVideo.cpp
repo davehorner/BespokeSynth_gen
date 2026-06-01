@@ -27,6 +27,7 @@
 #include <climits>
 #include <cmath>
 #include <cstdio>
+#include <cstdlib>
 #include <random>
 #include <sstream>
 
@@ -40,6 +41,52 @@
 
 namespace
 {
+bool HasCandleVideoWeights(const juce::File& directory)
+{
+   return directory.getChildFile("ltxv-2b-0.9.8-distilled.safetensors").existsAsFile();
+}
+
+bool IsRustCheckoutModelPath(const std::string& path)
+{
+   const juce::String normalized = juce::String(path).replace("\\", "/").toLowerCase();
+   return normalized.contains("/libs/rust/candle-video/models/ltx-video");
+}
+
+juce::File GetRepoRoot(const juce::File& manifest)
+{
+   return manifest.getParentDirectory().getParentDirectory().getParentDirectory().getParentDirectory();
+}
+
+std::string GetCargoTargetDir(const juce::File& manifest)
+{
+   const char* overrideDir = std::getenv("BESPOKE_CANDLE_VIDEO_CARGO_TARGET_DIR");
+   if (overrideDir != nullptr && overrideDir[0] != '\0')
+      return juce::File(overrideDir).getFullPathName().replace("\\", "/").toStdString();
+
+   return GetRepoRoot(manifest).getChildFile("libs").getChildFile("rust").getChildFile("cv-t").getFullPathName().replace("\\", "/").toStdString();
+}
+
+juce::StringArray WrapCargoCommandForHost(const juce::File& manifest, const juce::StringArray& cargoArgs)
+{
+#if JUCE_WINDOWS
+   const juce::File launcher = GetRepoRoot(manifest).getChildFile("scripts").getChildFile("run-cargo-vsdev.ps1");
+   if (launcher.existsAsFile())
+   {
+      juce::StringArray args;
+      args.add("powershell");
+      args.add("-NoProfile");
+      args.add("-ExecutionPolicy");
+      args.add("Bypass");
+      args.add("-File");
+      args.add(launcher.getFullPathName());
+      for (const auto& arg : cargoArgs)
+         args.add(arg);
+      return args;
+   }
+#endif
+   return cargoArgs;
+}
+
 std::string FormatCommandLine(const juce::StringArray& args);
 }
 
@@ -262,50 +309,53 @@ CandleVideo::GenerationResult CandleVideo::GenerateToFile(std::string prompt, st
       const juce::File tempOutputFile = juce::File(outputDir).getChildFile("video.mp4");
       tempOutputFile.deleteFile();
 
-      juce::StringArray args;
-      args.add("cargo");
-      args.add("run");
-      args.add("--manifest-path");
-      args.add(manifest.getFullPathName());
+      juce::StringArray cargoArgs;
+      cargoArgs.add("cargo");
+      cargoArgs.add("run");
+      cargoArgs.add("--manifest-path");
+      cargoArgs.add(manifest.getFullPathName());
+      cargoArgs.add("--target-dir");
+      cargoArgs.add(GetCargoTargetDir(manifest));
       if (!features.empty())
       {
-         args.add("--features");
-         args.add(features);
+         cargoArgs.add("--features");
+         cargoArgs.add(features);
       }
-      args.add("--example");
-      args.add("ltx-video");
-      args.add("--release");
-      args.add("--");
-      args.add("--local-weights");
-      args.add(weights);
-      args.add("--ltxv-version");
-      args.add(version);
+      cargoArgs.add("--example");
+      cargoArgs.add("ltx-video");
+      cargoArgs.add("--release");
+      cargoArgs.add("--");
+      cargoArgs.add("--local-weights");
+      cargoArgs.add(weights);
+      cargoArgs.add("--ltxv-version");
+      cargoArgs.add(version);
       if (juce::File(unified).existsAsFile())
       {
-         args.add("--unified-weights");
-         args.add(unified);
+         cargoArgs.add("--unified-weights");
+         cargoArgs.add(unified);
       }
 
-      args.add("--prompt");
-      args.add(prompt);
-      args.add("--width");
-      args.add(juce::String(width));
-      args.add("--height");
-      args.add(juce::String(height));
-      args.add("--num-frames");
-      args.add(juce::String(frames));
-      args.add("--fps");
-      args.add(juce::String(std::max(1, fps)));
-      args.add("--steps");
-      args.add(juce::String(steps));
-      args.add("--seed");
-      args.add(juce::String(attemptSeed));
-      args.add("--output-dir");
-      args.add(outputDir);
-      args.add("--mp4");
+      cargoArgs.add("--prompt");
+      cargoArgs.add(prompt);
+      cargoArgs.add("--width");
+      cargoArgs.add(juce::String(width));
+      cargoArgs.add("--height");
+      cargoArgs.add(juce::String(height));
+      cargoArgs.add("--num-frames");
+      cargoArgs.add(juce::String(frames));
+      cargoArgs.add("--fps");
+      cargoArgs.add(juce::String(std::max(1, fps)));
+      cargoArgs.add("--steps");
+      cargoArgs.add(juce::String(steps));
+      cargoArgs.add("--seed");
+      cargoArgs.add(juce::String(attemptSeed));
+      cargoArgs.add("--output-dir");
+      cargoArgs.add(outputDir);
+      cargoArgs.add("--mp4");
       if (cpu)
-         args.add("--cpu");
+         cargoArgs.add("--cpu");
 
+      const juce::StringArray args = WrapCargoCommandForHost(manifest, cargoArgs);
       AppendStatusText("running candle-video seed " + std::to_string(attemptSeed) + ":\n" + FormatCommandLine(args) + "\n");
 
       juce::ChildProcess process;
@@ -476,17 +526,16 @@ std::string CandleVideo::GetDefaultRoot() const
 std::string CandleVideo::GetDefaultWeights() const
 {
    const juce::File configuredWeights(BESPOKE_CANDLE_VIDEO_DEFAULT_WEIGHTS);
-   if (configuredWeights.exists())
+   if (HasCandleVideoWeights(configuredWeights))
       return configuredWeights.getFullPathName().replace("\\", "/").toStdString();
 
    const std::string topLevelWeights = "models/ltx-video";
-   if (juce::File(topLevelWeights).exists())
+   if (HasCandleVideoWeights(juce::File(topLevelWeights)))
       return topLevelWeights;
 
-   const std::string defaultWeights = GetDefaultRoot() + "/models/ltx-video";
-   if (juce::File(defaultWeights).exists())
-      return defaultWeights;
-   return defaultWeights;
+   if (configuredWeights.getFullPathName().isNotEmpty())
+      return configuredWeights.getFullPathName().replace("\\", "/").toStdString();
+   return topLevelWeights;
 }
 
 std::string CandleVideo::GetDefaultUnifiedWeights() const
@@ -1641,6 +1690,10 @@ void CandleVideo::LoadState(FileStreamIn& in, int rev)
       in >> mCpu;
       in >> mAutoload;
    }
+   if (mWeights.empty() || (IsRustCheckoutModelPath(mWeights) && !HasCandleVideoWeights(juce::File(mWeights))))
+      mWeights = GetDefaultWeights();
+   if (mCargoFeatures.empty())
+      mCargoFeatures = BESPOKE_CANDLE_VIDEO_DEFAULT_FEATURES;
    if (rev >= 2)
       in >> mAutoplay;
    if (rev >= 3)

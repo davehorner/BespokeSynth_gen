@@ -39,6 +39,7 @@ Release/Bespoke.app/*
 
 ## Build generated
 DerivedData/
+/i/
 
 # Rust dependency checkouts created by `task setup`.
 /libs/rust/

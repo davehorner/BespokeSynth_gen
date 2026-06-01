@@ -15,8 +15,8 @@ sync_dep() {
   fi
 
   git -c "safe.directory=$(pwd)/$path" -C "$path" fetch --depth 1 origin "$ref"
-  git -c "safe.directory=$(pwd)/$path" -C "$path" checkout --detach "$ref"
-  printf "%s ready at %.12s\n" "$name" "$ref"
+  git -c "safe.directory=$(pwd)/$path" -C "$path" checkout -B "$ref" FETCH_HEAD
+  printf "%s ready at latest %s\n" "$name" "$ref"
 }
 
 sync_dep acuneus "$1" "$2" libs/rust/acuneus

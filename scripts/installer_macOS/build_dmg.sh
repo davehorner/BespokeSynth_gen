@@ -4,7 +4,7 @@
 rm Bespoke-Mac.dmg
 
 rm -rf BespokeSynth.app
-ditto ../../ignore/build/Source/BespokeSynth_artefacts/Release/BespokeSynth.app BespokeSynth.app
+ditto ../../i/build/Source/BespokeSynth_artefacts/Release/BespokeSynth.app BespokeSynth.app
 
 #codesign --force --options runtime --timestamp --verbose=4 --entitlements entitlements.plist --sign "Developer ID Application: Ryan Challinor (J5RJ562GN5)" BespokeSynth.app/Contents/MacOS/BespokeSynth
 #codesign --force --options runtime --timestamp --verbose=4 --entitlements entitlements.plist --sign "Developer ID Application: Ryan Challinor (J5RJ562GN5)" BespokeSynth.app/Contents/Frameworks/Python.framework/Versions/3.9/Python

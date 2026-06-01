@@ -30,8 +30,8 @@ function Sync-Dep($Name, $Repo, $Ref, $Path) {
    }
 
    Run-Git @("fetch", "--depth", "1", "origin", $Ref) $Path
-   Run-Git @("checkout", "--detach", $Ref) $Path
-   Write-Host ($Name + " ready at " + $Ref.Substring(0, 12))
+   Run-Git @("checkout", "-B", $Ref, "FETCH_HEAD") $Path
+   Write-Host ($Name + " ready at latest " + $Ref)
 }
 
 Sync-Dep "acuneus" $AcuneusRepo $AcuneusRef "libs/rust/acuneus"

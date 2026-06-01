@@ -1,5 +1,5 @@
 param(
-   [string]$BuildDir = "ignore/build",
+   [string]$BuildDir = "i/build",
    [string]$Config = "Debug"
 )
 

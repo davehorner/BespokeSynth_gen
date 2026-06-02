@@ -332,6 +332,12 @@ void Acuneus::Poll()
       SendTransport();
    if (mInstance != nullptr && gTime > mLastMouseSendTime + 33.0)
       UpdateTrackedMouseParams();
+   if (mInstance != nullptr && mPendingChromeApplies > 0)
+   {
+      --mPendingChromeApplies;
+      ApplyOverlayVisible();
+      ApplyTitleBarVisible();
+   }
 #endif
 
    if (mMusicAutomation)
@@ -697,6 +703,7 @@ void Acuneus::OpenInstance()
    }
 
    mOpenBinName = binName;
+   mPendingChromeApplies = 30;
    ApplyOverlayVisible();
    ApplyTitleBarVisible();
    ApplyWindowScale();
@@ -746,6 +753,7 @@ void Acuneus::CloseInstance()
    ClearParamControls();
    mPendingDiscoveryRequests = 0;
    mPendingAnchorApplies = 0;
+   mPendingChromeApplies = 0;
 }
 
 void Acuneus::ClearParamControls()
@@ -956,25 +964,26 @@ void Acuneus::EnableMusicAutomation(bool enabled)
 
 void Acuneus::SetMusicAutomationEnabled(bool enabled)
 {
-   if (enabled == mMusicAutomation)
-   {
-      if (enabled)
-         mMusicAutomationAmount = std::max(mMusicAutomationAmount, 0.65f);
-      return;
-   }
-
    mMusicAutomation = enabled;
    if (enabled)
    {
       mMusicAutomationAmount = std::max(mMusicAutomationAmount, 0.65f);
-      sMusicAutomationUsers.fetch_add(1);
-      mLastMusicAutomationSendTime = -9999;
+      if (!mMusicAutomationRegistered)
+      {
+         sMusicAutomationUsers.fetch_add(1);
+         mMusicAutomationRegistered = true;
+         mLastMusicAutomationSendTime = -9999;
+      }
    }
    else
    {
-      int currentUsers = sMusicAutomationUsers.load();
-      while (currentUsers > 0 && !sMusicAutomationUsers.compare_exchange_weak(currentUsers, currentUsers - 1))
+      if (mMusicAutomationRegistered)
       {
+         int currentUsers = sMusicAutomationUsers.load();
+         while (currentUsers > 0 && !sMusicAutomationUsers.compare_exchange_weak(currentUsers, currentUsers - 1))
+         {
+         }
+         mMusicAutomationRegistered = false;
       }
       mMusicAutomationLevel.store(0.0f);
       if (sMusicAutomationUsers.load() == 0)

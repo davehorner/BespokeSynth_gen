@@ -81,6 +81,8 @@ void WelcomeScreen::CreateUIControls()
    UIBLOCK_SHIFTRIGHT();
    BUTTON(mAcuneusPatchButton, "acuneus");
    UIBLOCK_SHIFTRIGHT();
+   BUTTON(mAcuneusShaderWalkPatchButton, "shader walk");
+   UIBLOCK_SHIFTRIGHT();
    BUTTON(mAcuneusStableAudioPatchButton, "acuneus/stableaudio");
    UIBLOCK_SHIFTRIGHT();
    BUTTON(mAcuneusCandleVideoPatchButton, "acuneus/candlevideo");
@@ -220,6 +222,7 @@ void WelcomeScreen::DrawModule()
 
    mNewPatchButton->Draw();
    mAcuneusPatchButton->Draw();
+   mAcuneusShaderWalkPatchButton->Draw();
    mAcuneusStableAudioPatchButton->Draw();
    mAcuneusCandleVideoPatchButton->Draw();
    mAcuneusSynthPatchButton->Draw();
@@ -314,6 +317,8 @@ void WelcomeScreen::ButtonClicked(ClickButton* button, double time)
       TheSynth->ReloadInitialLayout();
    if (button == mAcuneusPatchButton)
       TheSynth->LoadAcuneusPatch();
+   if (button == mAcuneusShaderWalkPatchButton)
+      TheSynth->LoadAcuneusShaderWalkPatch();
    if (button == mAcuneusStableAudioPatchButton)
       TheSynth->LoadAcuneusStableAudioPatch();
    if (button == mAcuneusCandleVideoPatchButton)

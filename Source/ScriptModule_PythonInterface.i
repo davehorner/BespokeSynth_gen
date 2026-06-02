@@ -46,6 +46,12 @@
 #include "Beats.h"
 #include "AbletonDeviceShared.h"
 
+#if BESPOKE_ACUNEUS_ENABLED
+extern "C" {
+#include "acuneus_capi.h"
+}
+#endif
+
 #include "leathers/push"
 #include "leathers/unused-value"
 #include "leathers/range-loop-analysis"
@@ -175,6 +181,14 @@ PYBIND11_EMBEDDED_MODULE(bespoke, m) {
             paths.push_back(control->Path());
       }
       return paths;
+   });
+   m.def("get_acuneus_shader_count", []()
+   {
+#if BESPOKE_ACUNEUS_ENABLED
+      return (int)cuneus_bin_count();
+#else
+      return 0;
+#endif
    });
    ///example: bespoke.set_background_text('"' + '"\n"'.join(bespoke.get_controls("transport")) + '"', 14, 0, 50, 1, 1, 1)
    m.def("location_recall", [](char location)

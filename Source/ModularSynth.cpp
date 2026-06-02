@@ -380,6 +380,33 @@ void ModularSynth::Poll()
          mWantLoadAcuneusPatch = false;
       }
 
+      if (mWantLoadAcuneusShaderWalkPatch)
+      {
+         LoadLayoutFromFile(ofToDataPath(UserPrefs.layout.Get()));
+
+         ModuleFactory::Spawnable acuneusSpawnable;
+         acuneusSpawnable.mLabel = "acuneus";
+         auto* acuneus = dynamic_cast<Acuneus*>(SpawnModuleOnTheFly(acuneusSpawnable, 40, 120, true, "acuneus_shader_walk"));
+
+         ModuleFactory::Spawnable scriptSpawnable;
+         scriptSpawnable.mLabel = "script";
+         auto* script = dynamic_cast<ScriptModule*>(SpawnModuleOnTheFly(scriptSpawnable, 430, 120, true, "shader_walk_script"));
+
+         if (acuneus != nullptr)
+            acuneus->OpenInstance();
+
+         if (script != nullptr)
+         {
+            std::string scriptPath = ofToResourcePath("userdata_original/scripts/acuneus_shader_walk.py");
+            if (!juce::File(scriptPath).existsAsFile())
+               scriptPath = ofToDataPath("scripts/acuneus_shader_walk.py");
+            if (script->LoadScriptFile(scriptPath))
+               script->ExecuteCode();
+         }
+
+         mWantLoadAcuneusShaderWalkPatch = false;
+      }
+
       if (mWantLoadAcuneusStableAudioPatch)
       {
          LoadLayoutFromFile(ofToDataPath(UserPrefs.layout.Get()));

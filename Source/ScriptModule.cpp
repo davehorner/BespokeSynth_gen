@@ -50,6 +50,8 @@
 #include "leathers/pop"
 #include "juce_cryptography/juce_cryptography.h"
 
+#include <map>
+
 namespace py = pybind11;
 using namespace juce;
 
@@ -702,6 +704,33 @@ void ScriptModule::SendCCFromScript(int control, int value, int noteOutputIndex)
    }
 }
 
+bool ScriptModule::LoadScriptFile(std::string path)
+{
+   mLoadedScriptPath = path;
+   File resourceFile = File(mLoadedScriptPath);
+
+   if (!resourceFile.existsAsFile())
+   {
+      DBG("File doesn't exist ...");
+      return false;
+   }
+
+   std::unique_ptr<FileInputStream> input(resourceFile.createInputStream());
+
+   if (!input->openedOk())
+   {
+      DBG("Failed to open file");
+      return false;
+   }
+
+   mLoadedScriptFiletime = resourceFile.getLastModificationTime();
+
+   std::string text = input->readString().toStdString();
+   ofStringReplace(text, "\r", "");
+   mCodeEntry->SetText(text);
+   return true;
+}
+
 void ScriptModule::ScheduleNote(double time, float pitch, float velocity, float pan, int noteOutputIndex)
 {
    for (size_t i = 0; i < mScheduledNoteOutput.size(); ++i)
@@ -1040,30 +1069,7 @@ void ScriptModule::ButtonClicked(ClickButton* button, double time)
    if (button == mLoadScriptButton)
    {
       if (mLoadScriptIndex >= 0 && mLoadScriptIndex < (int)mScriptFilePaths.size())
-      {
-         mLoadedScriptPath = mScriptFilePaths[mLoadScriptIndex];
-         File resourceFile = File(mLoadedScriptPath);
-
-         if (!resourceFile.existsAsFile())
-         {
-            DBG("File doesn't exist ...");
-            return;
-         }
-
-         std::unique_ptr<FileInputStream> input(resourceFile.createInputStream());
-
-         if (!input->openedOk())
-         {
-            DBG("Failed to open file");
-            return;
-         }
-
-         mLoadedScriptFiletime = resourceFile.getLastModificationTime();
-
-         std::string text = input->readString().toStdString();
-         ofStringReplace(text, "\r", "");
-         mCodeEntry->SetText(text);
-      }
+         LoadScriptFile(mScriptFilePaths[mLoadScriptIndex]);
    }
 
    if (button == mShowReferenceButton)
@@ -1113,19 +1119,24 @@ void ScriptModule::RefreshScriptFiles()
 {
    mScriptFilePaths.clear();
    mLoadScriptSelector->Clear();
-   std::list<std::string> scripts;
+   std::map<std::string, std::string> scripts;
+
+   for (const auto& entry : RangedDirectoryIterator{ File{ ofToResourcePath("userdata_original/scripts") }, false, "*.py" })
+   {
+      const auto& file = entry.getFile();
+      scripts[file.getFileName().toStdString()] = file.getFullPathName().toStdString();
+   }
+
    for (const auto& entry : RangedDirectoryIterator{ File{ ofToDataPath("scripts") }, false, "*.py" })
    {
       const auto& file = entry.getFile();
-      scripts.push_back(file.getFileName().toStdString());
+      scripts[file.getFileName().toStdString()] = file.getFullPathName().toStdString();
    }
-
-   scripts.sort();
 
    for (const auto& script : scripts)
    {
-      mLoadScriptSelector->AddLabel(script, (int)mScriptFilePaths.size());
-      mScriptFilePaths.push_back(ofToDataPath("scripts/" + script));
+      mLoadScriptSelector->AddLabel(script.first, (int)mScriptFilePaths.size());
+      mScriptFilePaths.push_back(script.second);
    }
 }
 

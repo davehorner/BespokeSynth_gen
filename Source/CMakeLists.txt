@@ -836,7 +836,7 @@ set(BESPOKE_ACUNEUS_CARGO_TARGET_DIR "${CMAKE_SOURCE_DIR}/libs/rust/ac-t" CACHE 
 if(BESPOKE_ACUNEUS_CARGO_TARGET_DIR MATCHES "[/\\\\](ignore|i)[/\\\\]" OR BESPOKE_ACUNEUS_CARGO_TARGET_DIR MATCHES "[/\\\\]acuneus-target$")
     set(BESPOKE_ACUNEUS_CARGO_TARGET_DIR "${CMAKE_SOURCE_DIR}/libs/rust/ac-t" CACHE PATH "Cargo target directory for Acuneus" FORCE)
 endif()
-set(BESPOKE_ACUNEUS_RUNNER_CONTENT "both" CACHE STRING "What acuneus.exe can run: examples, bins, or both")
+set(BESPOKE_ACUNEUS_RUNNER_CONTENT "both" CACHE STRING "What acuneus_runner can run: examples, bins, or both")
 set_property(CACHE BESPOKE_ACUNEUS_RUNNER_CONTENT PROPERTY STRINGS examples bins both)
 
 if(BESPOKE_ACUNEUS_ROOT AND BESPOKE_ACUNEUS_DEFAULT_ROOT AND EXISTS "${BESPOKE_ACUNEUS_DEFAULT_ROOT}/include/acuneus.h")
@@ -856,7 +856,8 @@ if(BESPOKE_ACUNEUS_ROOT AND EXISTS "${BESPOKE_ACUNEUS_ROOT}/Cargo.toml")
         message(FATAL_ERROR "Acuneus support requires cargo. Set BESPOKE_ACUNEUS_ROOT empty to disable it.")
     endif()
 
-    set(BESPOKE_ACUNEUS_BINS acuneus)
+    set(BESPOKE_ACUNEUS_RUNNER_BIN acuneus_runner)
+    set(BESPOKE_ACUNEUS_BINS ${BESPOKE_ACUNEUS_RUNNER_BIN})
     if(BESPOKE_ACUNEUS_RUNNER_CONTENT STREQUAL "bins" OR BESPOKE_ACUNEUS_RUNNER_CONTENT STREQUAL "both")
         list(APPEND BESPOKE_ACUNEUS_BINS
             roto
@@ -877,22 +878,27 @@ if(BESPOKE_ACUNEUS_ROOT AND EXISTS "${BESPOKE_ACUNEUS_ROOT}/Cargo.toml")
             cuneus-volumepassage
         )
     endif()
-    set(BESPOKE_ACUNEUS_CARGO_ARGS build --release --lib)
+    set(BESPOKE_ACUNEUS_CARGO_LIB_ARGS build --release --lib)
+    set(BESPOKE_ACUNEUS_CARGO_BIN_ARGS build --release)
     foreach(BESPOKE_ACUNEUS_BIN IN LISTS BESPOKE_ACUNEUS_BINS)
-        list(APPEND BESPOKE_ACUNEUS_CARGO_ARGS --bin "${BESPOKE_ACUNEUS_BIN}")
+        list(APPEND BESPOKE_ACUNEUS_CARGO_BIN_ARGS --bin "${BESPOKE_ACUNEUS_BIN}")
     endforeach()
 
     if(WIN32)
-        set(BESPOKE_ACUNEUS_IMPORT_LIBRARY "${BESPOKE_ACUNEUS_CARGO_TARGET_DIR}/release/acuneus.dll.lib")
-        set(BESPOKE_ACUNEUS_RUNTIME_LIBRARY "${BESPOKE_ACUNEUS_CARGO_TARGET_DIR}/release/acuneus.dll")
+        set(BESPOKE_ACUNEUS_IMPORT_LIBRARY "${BESPOKE_ACUNEUS_CARGO_TARGET_DIR}/release/acuneus_capi.dll.lib")
+        set(BESPOKE_ACUNEUS_RUNTIME_LIBRARY "${BESPOKE_ACUNEUS_CARGO_TARGET_DIR}/release/acuneus_capi.dll")
+        set(BESPOKE_ACUNEUS_CARGO_RUNTIME_LIBRARY "${BESPOKE_ACUNEUS_RUNTIME_LIBRARY}")
+        set(BESPOKE_ACUNEUS_CARGO_LIB_ARGS rustc --release --lib -- -C "link-arg=/OUT:${BESPOKE_ACUNEUS_RUNTIME_LIBRARY}" -C "link-arg=/IMPLIB:${BESPOKE_ACUNEUS_IMPORT_LIBRARY}")
         set(BESPOKE_ACUNEUS_EXECUTABLE_SUFFIX ".exe")
         set(BESPOKE_ACUNEUS_LINK_LIBRARY "${BESPOKE_ACUNEUS_IMPORT_LIBRARY}")
     elseif(APPLE)
-        set(BESPOKE_ACUNEUS_RUNTIME_LIBRARY "${BESPOKE_ACUNEUS_CARGO_TARGET_DIR}/release/libacuneus.dylib")
+        set(BESPOKE_ACUNEUS_CARGO_RUNTIME_LIBRARY "${BESPOKE_ACUNEUS_CARGO_TARGET_DIR}/release/libacuneus.dylib")
+        set(BESPOKE_ACUNEUS_RUNTIME_LIBRARY "${BESPOKE_ACUNEUS_CARGO_TARGET_DIR}/release/libacuneus_capi.dylib")
         set(BESPOKE_ACUNEUS_EXECUTABLE_SUFFIX "")
         set(BESPOKE_ACUNEUS_LINK_LIBRARY "${BESPOKE_ACUNEUS_RUNTIME_LIBRARY}")
     else()
-        set(BESPOKE_ACUNEUS_RUNTIME_LIBRARY "${BESPOKE_ACUNEUS_CARGO_TARGET_DIR}/release/libacuneus.so")
+        set(BESPOKE_ACUNEUS_CARGO_RUNTIME_LIBRARY "${BESPOKE_ACUNEUS_CARGO_TARGET_DIR}/release/libacuneus.so")
+        set(BESPOKE_ACUNEUS_RUNTIME_LIBRARY "${BESPOKE_ACUNEUS_CARGO_TARGET_DIR}/release/libacuneus_capi.so")
         set(BESPOKE_ACUNEUS_EXECUTABLE_SUFFIX "")
         set(BESPOKE_ACUNEUS_LINK_LIBRARY "${BESPOKE_ACUNEUS_RUNTIME_LIBRARY}")
     endif()
@@ -906,11 +912,24 @@ if(BESPOKE_ACUNEUS_ROOT AND EXISTS "${BESPOKE_ACUNEUS_ROOT}/Cargo.toml")
     list(REMOVE_DUPLICATES BESPOKE_ACUNEUS_OUTPUTS)
 
     add_custom_target(acuneus_capi_build
-        COMMAND ${CMAKE_COMMAND} -E env "CARGO_TARGET_DIR=${BESPOKE_ACUNEUS_CARGO_TARGET_DIR}" "ACUNEUS_RUNNER_CONTENT=${BESPOKE_ACUNEUS_RUNNER_CONTENT}" ${CARGO_EXECUTABLE} ${BESPOKE_ACUNEUS_CARGO_ARGS}
+        COMMAND ${CMAKE_COMMAND} -E env "CARGO_TARGET_DIR=${BESPOKE_ACUNEUS_CARGO_TARGET_DIR}" "ACUNEUS_RUNNER_CONTENT=${BESPOKE_ACUNEUS_RUNNER_CONTENT}" ${CARGO_EXECUTABLE} ${BESPOKE_ACUNEUS_CARGO_LIB_ARGS}
+        COMMAND ${CMAKE_COMMAND} -E env "CARGO_TARGET_DIR=${BESPOKE_ACUNEUS_CARGO_TARGET_DIR}" "ACUNEUS_RUNNER_CONTENT=${BESPOKE_ACUNEUS_RUNNER_CONTENT}" ${CARGO_EXECUTABLE} ${BESPOKE_ACUNEUS_CARGO_BIN_ARGS}
         BYPRODUCTS ${BESPOKE_ACUNEUS_OUTPUTS}
         WORKING_DIRECTORY "${BESPOKE_ACUNEUS_ROOT}"
         VERBATIM
     )
+    if(NOT WIN32)
+        add_custom_command(TARGET acuneus_capi_build POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different "${BESPOKE_ACUNEUS_CARGO_RUNTIME_LIBRARY}" "${BESPOKE_ACUNEUS_RUNTIME_LIBRARY}"
+            VERBATIM
+        )
+    endif()
+    if(APPLE)
+        add_custom_command(TARGET acuneus_capi_build POST_BUILD
+            COMMAND install_name_tool -id "@rpath/libacuneus_capi.dylib" "${BESPOKE_ACUNEUS_RUNTIME_LIBRARY}"
+            VERBATIM
+        )
+    endif()
     add_dependencies(BespokeSynth acuneus_capi_build)
 
     target_compile_definitions(BespokeSynth PRIVATE BESPOKE_ACUNEUS_ENABLED=1)
@@ -922,7 +941,20 @@ if(BESPOKE_ACUNEUS_ROOT AND EXISTS "${BESPOKE_ACUNEUS_ROOT}/Cargo.toml")
         COMMAND ${CMAKE_COMMAND} -E copy_if_different "${BESPOKE_ACUNEUS_RUNTIME_LIBRARY}" "$<TARGET_FILE_DIR:BespokeSynth>"
         VERBATIM
     )
-    foreach(BESPOKE_ACUNEUS_EXECUTABLE IN LISTS BESPOKE_ACUNEUS_EXECUTABLES)
+    if(WIN32)
+        add_custom_command(TARGET acuneus_capi_build POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E rm -f "$<TARGET_FILE_DIR:BespokeSynth>/acuneus.dll"
+            COMMAND ${CMAKE_COMMAND} -E rm -f "$<TARGET_FILE_DIR:BespokeSynth>/acuneus.exe"
+            VERBATIM
+        )
+    else()
+        add_custom_command(TARGET acuneus_capi_build POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E rm -f "$<TARGET_FILE_DIR:BespokeSynth>/acuneus"
+            VERBATIM
+        )
+    endif()
+    foreach(BESPOKE_ACUNEUS_BIN IN LISTS BESPOKE_ACUNEUS_BINS)
+        set(BESPOKE_ACUNEUS_EXECUTABLE "${BESPOKE_ACUNEUS_CARGO_TARGET_DIR}/release/${BESPOKE_ACUNEUS_BIN}${BESPOKE_ACUNEUS_EXECUTABLE_SUFFIX}")
         add_custom_command(TARGET acuneus_capi_build POST_BUILD
             COMMAND ${CMAKE_COMMAND} -E copy_if_different "${BESPOKE_ACUNEUS_EXECUTABLE}" "$<TARGET_FILE_DIR:BespokeSynth>"
             VERBATIM

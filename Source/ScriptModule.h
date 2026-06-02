@@ -79,6 +79,7 @@ public:
    void ClearContext();
    bool IsScriptTrusted() const { return !mIsScriptUntrusted; }
 
+   bool LoadScriptFile(std::string path);
    void RunCode(double time, std::string code, bool hasReturnValue = false);
 
    void OnPulse(double time, float velocity, int flags) override;

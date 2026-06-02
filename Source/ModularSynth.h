@@ -163,6 +163,7 @@ public:
    void LoadAcuneusCandleVideoPatch() { mWantLoadAcuneusCandleVideoPatch = true; }
    void LoadAcuneusSynthPatch() { mWantLoadAcuneusSynthPatch = true; }
    void LoadAcuneusYoutubePatch() { mWantLoadAcuneusYoutubePatch = true; }
+   void LoadAcuneusShaderWalkPatch() { mWantLoadAcuneusShaderWalkPatch = true; }
    bool HasFatalError() { return mFatalError != ""; }
 
    void AddLissajousDrawer(IDrawableModule* module) { mLissajousDrawers.push_back(module); }
@@ -435,6 +436,7 @@ private:
    bool mWantLoadAcuneusCandleVideoPatch{ false };
    bool mWantLoadAcuneusSynthPatch{ false };
    bool mWantLoadAcuneusYoutubePatch{ false };
+   bool mWantLoadAcuneusShaderWalkPatch{ false };
    std::string mCurrentSaveStatePath;
    std::string mStartupSaveStateFile;
 

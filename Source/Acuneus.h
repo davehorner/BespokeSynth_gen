@@ -219,6 +219,7 @@ private:
    float mResolutionWidth{ 800.0f };
    float mResolutionHeight{ 600.0f };
    bool mMusicAutomation{ false };
+   bool mMusicAutomationRegistered{ false };
    float mMusicAutomationAmount{ 0.65f };
    std::atomic<float> mMusicAutomationLevel{ 0.0f };
    std::array<float, 69> mAudioSpectrum{};
@@ -235,6 +236,7 @@ private:
    bool mApplyingFeedback{ false };
    int mPendingDiscoveryRequests{ 0 };
    int mPendingAnchorApplies{ 0 };
+   int mPendingChromeApplies{ 0 };
    double mLastDiscoveryRequestTime{ -9999 };
    double mLastTransportSendTime{ -9999 };
 

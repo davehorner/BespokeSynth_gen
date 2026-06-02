@@ -67,6 +67,8 @@ task setup
 
 `task setup` initializes the normal Bespoke submodules and clones or updates the Rust integrations from the refs listed in `Taskfile.yml` (currently `main`). CMake uses those local checkouts when present; if one is missing, configure prints a `task setup` reminder instead of cloning during configure.
 
+The Acuneus runner is `acuneus_runner` / `acuneus_runner.exe`, while the C API dynamic library uses the explicit `_capi` name on every platform: `acuneus_capi.dll` on Windows, `libacuneus_capi.dylib` on macOS, and `libacuneus_capi.so` on Linux.
+
 ### Acuneus / StableAudio Visualizer
 
 When Bespoke is built with Acuneus support, the welcome screen includes an `acuneus/stableaudio` button. It creates:
@@ -110,7 +112,7 @@ keyboarddisplay -> acuneus/synth -> gain -> output
 
 The keyboard sends notes to the Acuneus GPU synth. The synth sends PCM feedback back to Bespoke, and Bespoke plays it from the Acuneus audio output cable. Generated boolean params are shown as checkboxes; for the synth this includes `Local Audio`, which lets the synth process play through its own audio device in addition to Bespoke's routed output.
 
-The Acuneus runtime and C ABI live in `libs/rust/acuneus`. The Bespoke-side module is implemented in `Source/Acuneus.cpp` and `Source/Acuneus.h`.
+The Acuneus runtime and C ABI live in `libs/rust/acuneus`. The Bespoke-side module links the `_capi` dynamic library and is implemented in `Source/Acuneus.cpp` and `Source/Acuneus.h`.
 
 
 ### License

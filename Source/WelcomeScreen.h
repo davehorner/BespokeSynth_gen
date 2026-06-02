@@ -93,6 +93,7 @@ private:
    ClickButton* mDiscordLinkButton{ nullptr };
    ClickButton* mNewPatchButton{ nullptr };
    ClickButton* mAcuneusPatchButton{ nullptr };
+   ClickButton* mAcuneusShaderWalkPatchButton{ nullptr };
    ClickButton* mAcuneusStableAudioPatchButton{ nullptr };
    ClickButton* mAcuneusCandleVideoPatchButton{ nullptr };
    ClickButton* mAcuneusSynthPatchButton{ nullptr };

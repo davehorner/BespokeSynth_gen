@@ -138,8 +138,14 @@ target_sources(BespokeSynth PRIVATE
     ControlInterface.h
     Acuneus.cpp
     Acuneus.h
+    AcuneusAutomation.cpp
+    AcuneusAutomation.h
+    Awisp.cpp
+    Awisp.h
     CandleVideo.cpp
     CandleVideo.h
+    MpvPlayer.cpp
+    MpvPlayer.h
     OllamaPromptGenerator.cpp
     OllamaPromptGenerator.h
     ControlRecorder.cpp
@@ -160,6 +166,8 @@ target_sources(BespokeSynth PRIVATE
     DCOffset.h
     DCRemoverEffect.cpp
     DCRemoverEffect.h
+    DefaultOutputLoopback.cpp
+    DefaultOutputLoopback.h
     DebugAudioSource.cpp
     DebugAudioSource.h
     DelayEffect.cpp
@@ -837,6 +845,10 @@ if(BESPOKE_ACUNEUS_CARGO_TARGET_DIR MATCHES "[/\\\\](ignore|i)[/\\\\]" OR BESPOK
     set(BESPOKE_ACUNEUS_CARGO_TARGET_DIR "${CMAKE_SOURCE_DIR}/libs/rust/ac-t" CACHE PATH "Cargo target directory for Acuneus" FORCE)
 endif()
 set(BESPOKE_ACUNEUS_RUNNER_CONTENT "both" CACHE STRING "What acuneus_runner can run: examples, bins, or both")
+if(BESPOKE_ACUNEUS_RUNNER_CONTENT STREQUAL "examples")
+    message(STATUS "Migrating Acuneus runner content from examples-only to both")
+    set(BESPOKE_ACUNEUS_RUNNER_CONTENT "both" CACHE STRING "What acuneus_runner can run: examples, bins, or both" FORCE)
+endif()
 set_property(CACHE BESPOKE_ACUNEUS_RUNNER_CONTENT PROPERTY STRINGS examples bins both)
 
 if(BESPOKE_ACUNEUS_ROOT AND BESPOKE_ACUNEUS_DEFAULT_ROOT AND EXISTS "${BESPOKE_ACUNEUS_DEFAULT_ROOT}/include/acuneus.h")
@@ -858,6 +870,7 @@ if(BESPOKE_ACUNEUS_ROOT AND EXISTS "${BESPOKE_ACUNEUS_ROOT}/Cargo.toml")
 
     set(BESPOKE_ACUNEUS_RUNNER_BIN acuneus_runner)
     set(BESPOKE_ACUNEUS_BINS ${BESPOKE_ACUNEUS_RUNNER_BIN})
+    set(BESPOKE_ACUNEUS_EXAMPLES "")
     if(BESPOKE_ACUNEUS_RUNNER_CONTENT STREQUAL "bins" OR BESPOKE_ACUNEUS_RUNNER_CONTENT STREQUAL "both")
         list(APPEND BESPOKE_ACUNEUS_BINS
             roto
@@ -877,12 +890,22 @@ if(BESPOKE_ACUNEUS_ROOT AND EXISTS "${BESPOKE_ACUNEUS_ROOT}/Cargo.toml")
             cuneus-veridisquo
             cuneus-volumepassage
         )
+        file(GLOB BESPOKE_ACUNEUS_EXAMPLE_FILES CONFIGURE_DEPENDS "${BESPOKE_ACUNEUS_ROOT}/examples/*.rs")
+        foreach(BESPOKE_ACUNEUS_EXAMPLE_FILE IN LISTS BESPOKE_ACUNEUS_EXAMPLE_FILES)
+            get_filename_component(BESPOKE_ACUNEUS_EXAMPLE_NAME "${BESPOKE_ACUNEUS_EXAMPLE_FILE}" NAME_WE)
+            if(BESPOKE_ACUNEUS_EXAMPLE_NAME MATCHES "^(cuneus-|roto$)")
+                list(APPEND BESPOKE_ACUNEUS_EXAMPLES "${BESPOKE_ACUNEUS_EXAMPLE_NAME}")
+            endif()
+        endforeach()
     endif()
     set(BESPOKE_ACUNEUS_CARGO_LIB_ARGS build --release --lib)
     set(BESPOKE_ACUNEUS_CARGO_BIN_ARGS build --release)
     foreach(BESPOKE_ACUNEUS_BIN IN LISTS BESPOKE_ACUNEUS_BINS)
         list(APPEND BESPOKE_ACUNEUS_CARGO_BIN_ARGS --bin "${BESPOKE_ACUNEUS_BIN}")
     endforeach()
+    if(BESPOKE_ACUNEUS_EXAMPLES)
+        list(APPEND BESPOKE_ACUNEUS_CARGO_BIN_ARGS --examples)
+    endif()
 
     if(WIN32)
         set(BESPOKE_ACUNEUS_IMPORT_LIBRARY "${BESPOKE_ACUNEUS_CARGO_TARGET_DIR}/release/acuneus_capi.dll.lib")
@@ -907,29 +930,47 @@ if(BESPOKE_ACUNEUS_ROOT AND EXISTS "${BESPOKE_ACUNEUS_ROOT}/Cargo.toml")
     foreach(BESPOKE_ACUNEUS_BIN IN LISTS BESPOKE_ACUNEUS_BINS)
         list(APPEND BESPOKE_ACUNEUS_EXECUTABLES "${BESPOKE_ACUNEUS_CARGO_TARGET_DIR}/release/${BESPOKE_ACUNEUS_BIN}${BESPOKE_ACUNEUS_EXECUTABLE_SUFFIX}")
     endforeach()
+    set(BESPOKE_ACUNEUS_EXAMPLE_EXECUTABLES "")
+    foreach(BESPOKE_ACUNEUS_EXAMPLE IN LISTS BESPOKE_ACUNEUS_EXAMPLES)
+        list(APPEND BESPOKE_ACUNEUS_EXAMPLE_EXECUTABLES "${BESPOKE_ACUNEUS_CARGO_TARGET_DIR}/release/examples/${BESPOKE_ACUNEUS_EXAMPLE}${BESPOKE_ACUNEUS_EXECUTABLE_SUFFIX}")
+    endforeach()
 
-    set(BESPOKE_ACUNEUS_OUTPUTS "${BESPOKE_ACUNEUS_LINK_LIBRARY}" "${BESPOKE_ACUNEUS_RUNTIME_LIBRARY}" ${BESPOKE_ACUNEUS_EXECUTABLES})
+    set(BESPOKE_ACUNEUS_OUTPUTS "${BESPOKE_ACUNEUS_LINK_LIBRARY}" "${BESPOKE_ACUNEUS_RUNTIME_LIBRARY}" ${BESPOKE_ACUNEUS_EXECUTABLES} ${BESPOKE_ACUNEUS_EXAMPLE_EXECUTABLES})
     list(REMOVE_DUPLICATES BESPOKE_ACUNEUS_OUTPUTS)
 
-    add_custom_target(acuneus_capi_build
-        COMMAND ${CMAKE_COMMAND} -E env "CARGO_TARGET_DIR=${BESPOKE_ACUNEUS_CARGO_TARGET_DIR}" "ACUNEUS_RUNNER_CONTENT=${BESPOKE_ACUNEUS_RUNNER_CONTENT}" ${CARGO_EXECUTABLE} ${BESPOKE_ACUNEUS_CARGO_LIB_ARGS}
-        COMMAND ${CMAKE_COMMAND} -E env "CARGO_TARGET_DIR=${BESPOKE_ACUNEUS_CARGO_TARGET_DIR}" "ACUNEUS_RUNNER_CONTENT=${BESPOKE_ACUNEUS_RUNNER_CONTENT}" ${CARGO_EXECUTABLE} ${BESPOKE_ACUNEUS_CARGO_BIN_ARGS}
-        BYPRODUCTS ${BESPOKE_ACUNEUS_OUTPUTS}
-        WORKING_DIRECTORY "${BESPOKE_ACUNEUS_ROOT}"
-        VERBATIM
+    file(GLOB_RECURSE BESPOKE_ACUNEUS_SOURCE_INPUTS CONFIGURE_DEPENDS
+        "${BESPOKE_ACUNEUS_ROOT}/Cargo.toml"
+        "${BESPOKE_ACUNEUS_ROOT}/Cargo.lock"
+        "${BESPOKE_ACUNEUS_ROOT}/build.rs"
+        "${BESPOKE_ACUNEUS_ROOT}/src/*.rs"
+        "${BESPOKE_ACUNEUS_ROOT}/src/*.wgsl"
+        "${BESPOKE_ACUNEUS_ROOT}/examples/*.rs"
+        "${BESPOKE_ACUNEUS_ROOT}/examples/*.wgsl"
+        "${BESPOKE_ACUNEUS_ROOT}/bins/*.rs"
+        "${BESPOKE_ACUNEUS_ROOT}/bins/*.wgsl"
     )
+    set(BESPOKE_ACUNEUS_POST_CARGO_COMMANDS "")
     if(NOT WIN32)
-        add_custom_command(TARGET acuneus_capi_build POST_BUILD
+        list(APPEND BESPOKE_ACUNEUS_POST_CARGO_COMMANDS
             COMMAND ${CMAKE_COMMAND} -E copy_if_different "${BESPOKE_ACUNEUS_CARGO_RUNTIME_LIBRARY}" "${BESPOKE_ACUNEUS_RUNTIME_LIBRARY}"
-            VERBATIM
         )
     endif()
     if(APPLE)
-        add_custom_command(TARGET acuneus_capi_build POST_BUILD
+        list(APPEND BESPOKE_ACUNEUS_POST_CARGO_COMMANDS
             COMMAND install_name_tool -id "@rpath/libacuneus_capi.dylib" "${BESPOKE_ACUNEUS_RUNTIME_LIBRARY}"
-            VERBATIM
         )
     endif()
+
+    add_custom_command(
+        OUTPUT ${BESPOKE_ACUNEUS_OUTPUTS}
+        COMMAND ${CMAKE_COMMAND} -E env "CARGO_TARGET_DIR=${BESPOKE_ACUNEUS_CARGO_TARGET_DIR}" "ACUNEUS_RUNNER_CONTENT=${BESPOKE_ACUNEUS_RUNNER_CONTENT}" ${CARGO_EXECUTABLE} ${BESPOKE_ACUNEUS_CARGO_LIB_ARGS}
+        COMMAND ${CMAKE_COMMAND} -E env "CARGO_TARGET_DIR=${BESPOKE_ACUNEUS_CARGO_TARGET_DIR}" "ACUNEUS_RUNNER_CONTENT=${BESPOKE_ACUNEUS_RUNNER_CONTENT}" ${CARGO_EXECUTABLE} ${BESPOKE_ACUNEUS_CARGO_BIN_ARGS}
+        ${BESPOKE_ACUNEUS_POST_CARGO_COMMANDS}
+        DEPENDS ${BESPOKE_ACUNEUS_SOURCE_INPUTS}
+        WORKING_DIRECTORY "${BESPOKE_ACUNEUS_ROOT}"
+        VERBATIM
+    )
+    add_custom_target(acuneus_capi_build DEPENDS ${BESPOKE_ACUNEUS_OUTPUTS})
     add_dependencies(BespokeSynth acuneus_capi_build)
 
     target_compile_definitions(BespokeSynth PRIVATE BESPOKE_ACUNEUS_ENABLED=1)
@@ -960,9 +1001,92 @@ if(BESPOKE_ACUNEUS_ROOT AND EXISTS "${BESPOKE_ACUNEUS_ROOT}/Cargo.toml")
             VERBATIM
         )
     endforeach()
+    if(BESPOKE_ACUNEUS_EXAMPLES)
+        add_custom_command(TARGET acuneus_capi_build POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:BespokeSynth>/examples"
+            VERBATIM
+        )
+        foreach(BESPOKE_ACUNEUS_EXAMPLE IN LISTS BESPOKE_ACUNEUS_EXAMPLES)
+            set(BESPOKE_ACUNEUS_EXAMPLE_EXECUTABLE "${BESPOKE_ACUNEUS_CARGO_TARGET_DIR}/release/examples/${BESPOKE_ACUNEUS_EXAMPLE}${BESPOKE_ACUNEUS_EXECUTABLE_SUFFIX}")
+            add_custom_command(TARGET acuneus_capi_build POST_BUILD
+                COMMAND ${CMAKE_COMMAND} -E copy_if_different "${BESPOKE_ACUNEUS_EXAMPLE_EXECUTABLE}" "$<TARGET_FILE_DIR:BespokeSynth>/examples"
+                VERBATIM
+            )
+        endforeach()
+    endif()
 else()
     message(WARNING "Acuneus Rust checkout is missing. Run: task setup")
     target_compile_definitions(BespokeSynth PRIVATE BESPOKE_ACUNEUS_ENABLED=0)
+endif()
+
+set(BESPOKE_AWISP_DEFAULT_ROOT "${CMAKE_SOURCE_DIR}/libs/rust/awisp")
+set(BESPOKE_AWISP_ROOT "${BESPOKE_AWISP_DEFAULT_ROOT}" CACHE PATH "Path to a local Awisp/Wisp workspace; leave empty to disable Awisp integration")
+if(BESPOKE_AWISP_DEFAULT_ROOT AND (NOT BESPOKE_AWISP_ROOT OR BESPOKE_AWISP_ROOT MATCHES "^[Rr]:[/\\\\]w[/\\\\]" OR BESPOKE_AWISP_ROOT MATCHES "-NOTFOUND$"))
+    set(BESPOKE_AWISP_ROOT "${BESPOKE_AWISP_DEFAULT_ROOT}" CACHE PATH "Path to a local Awisp/Wisp workspace; leave empty to disable Awisp integration" FORCE)
+endif()
+set(BESPOKE_AWISP_CARGO_TARGET_DIR "${CMAKE_SOURCE_DIR}/libs/rust/aw-t" CACHE PATH "Cargo target directory for Awisp")
+if(BESPOKE_AWISP_CARGO_TARGET_DIR MATCHES "[/\\\\](ignore|i)[/\\\\]" OR BESPOKE_AWISP_CARGO_TARGET_DIR MATCHES "[/\\\\](awisp-target|wisp-target)$")
+    set(BESPOKE_AWISP_CARGO_TARGET_DIR "${CMAKE_SOURCE_DIR}/libs/rust/aw-t" CACHE PATH "Cargo target directory for Awisp" FORCE)
+endif()
+
+if(BESPOKE_AWISP_ROOT AND EXISTS "${BESPOKE_AWISP_ROOT}/Cargo.toml")
+    find_program(CARGO_EXECUTABLE cargo)
+    if(NOT CARGO_EXECUTABLE)
+        message(FATAL_ERROR "Awisp support requires cargo. Set BESPOKE_AWISP_ROOT empty to disable it.")
+    endif()
+
+    set(BESPOKE_AWISP_CARGO_ARGS build -p awisp-capi --release)
+    set(BESPOKE_AWISP_EDITOR_CARGO_ARGS build -p wisp-editor --release)
+    if(WIN32)
+        set(BESPOKE_AWISP_IMPORT_LIBRARY "${BESPOKE_AWISP_CARGO_TARGET_DIR}/release/awisp_capi.dll.lib")
+        set(BESPOKE_AWISP_RUNTIME_LIBRARY "${BESPOKE_AWISP_CARGO_TARGET_DIR}/release/awisp_capi.dll")
+        set(BESPOKE_AWISP_LINK_LIBRARY "${BESPOKE_AWISP_IMPORT_LIBRARY}")
+        set(BESPOKE_AWISP_EDITOR_RUNTIME "${BESPOKE_AWISP_CARGO_TARGET_DIR}/release/wisp-editor.exe")
+    elseif(APPLE)
+        set(BESPOKE_AWISP_RUNTIME_LIBRARY "${BESPOKE_AWISP_CARGO_TARGET_DIR}/release/libawisp_capi.dylib")
+        set(BESPOKE_AWISP_LINK_LIBRARY "${BESPOKE_AWISP_RUNTIME_LIBRARY}")
+        set(BESPOKE_AWISP_EDITOR_RUNTIME "${BESPOKE_AWISP_CARGO_TARGET_DIR}/release/wisp-editor")
+    else()
+        set(BESPOKE_AWISP_RUNTIME_LIBRARY "${BESPOKE_AWISP_CARGO_TARGET_DIR}/release/libawisp_capi.so")
+        set(BESPOKE_AWISP_LINK_LIBRARY "${BESPOKE_AWISP_RUNTIME_LIBRARY}")
+        set(BESPOKE_AWISP_EDITOR_RUNTIME "${BESPOKE_AWISP_CARGO_TARGET_DIR}/release/wisp-editor")
+    endif()
+    set(BESPOKE_AWISP_OUTPUTS "${BESPOKE_AWISP_LINK_LIBRARY}" "${BESPOKE_AWISP_RUNTIME_LIBRARY}")
+    list(REMOVE_DUPLICATES BESPOKE_AWISP_OUTPUTS)
+
+    add_custom_command(
+        OUTPUT ${BESPOKE_AWISP_OUTPUTS}
+        COMMAND ${CMAKE_COMMAND} -E env "CARGO_TARGET_DIR=${BESPOKE_AWISP_CARGO_TARGET_DIR}" ${CARGO_EXECUTABLE} ${BESPOKE_AWISP_CARGO_ARGS}
+        WORKING_DIRECTORY "${BESPOKE_AWISP_ROOT}"
+        VERBATIM
+    )
+    add_custom_target(awisp_capi_build DEPENDS ${BESPOKE_AWISP_OUTPUTS})
+    add_dependencies(BespokeSynth awisp_capi_build)
+
+    add_custom_command(
+        OUTPUT "${BESPOKE_AWISP_EDITOR_RUNTIME}"
+        COMMAND ${CMAKE_COMMAND} -E env "CARGO_TARGET_DIR=${BESPOKE_AWISP_CARGO_TARGET_DIR}" ${CARGO_EXECUTABLE} ${BESPOKE_AWISP_EDITOR_CARGO_ARGS}
+        WORKING_DIRECTORY "${BESPOKE_AWISP_ROOT}"
+        VERBATIM
+    )
+    add_custom_target(awisp_editor_build DEPENDS "${BESPOKE_AWISP_EDITOR_RUNTIME}")
+    add_dependencies(BespokeSynth awisp_editor_build)
+
+    target_compile_definitions(BespokeSynth PRIVATE
+        BESPOKE_AWISP_ENABLED=1
+        BESPOKE_AWISP_ASSET_ROOT="${BESPOKE_AWISP_ROOT}/assets"
+    )
+    target_include_directories(BespokeSynth PRIVATE "${BESPOKE_AWISP_ROOT}/include")
+    target_link_libraries(BespokeSynth PRIVATE "${BESPOKE_AWISP_LINK_LIBRARY}")
+
+    add_custom_command(TARGET BespokeSynth POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different "${BESPOKE_AWISP_RUNTIME_LIBRARY}" "$<TARGET_FILE_DIR:BespokeSynth>"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different "${BESPOKE_AWISP_EDITOR_RUNTIME}" "$<TARGET_FILE_DIR:BespokeSynth>"
+        VERBATIM
+    )
+else()
+    message(WARNING "Awisp Rust checkout is missing. Clone davehorner/wisp.git to libs/rust/awisp or set BESPOKE_AWISP_ROOT.")
+    target_compile_definitions(BespokeSynth PRIVATE BESPOKE_AWISP_ENABLED=0)
 endif()
 
 set(BESPOKE_CANDLE_VIDEO_DEFAULT_ROOT "${CMAKE_SOURCE_DIR}/libs/rust/candle-video" CACHE PATH "Path to the CandleVideo Rust workspace")

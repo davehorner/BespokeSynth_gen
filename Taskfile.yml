@@ -8,6 +8,8 @@ vars:
   VS_ARCH: 'x64'
   ACUNEUS_REPO: 'https://github.com/davehorner/acuneus.git'
   ACUNEUS_REF: 'main'
+  AWISP_REPO: 'https://github.com/davehorner/wisp.git'
+  AWISP_REF: 'main'
   STABLE_AUDIO_REPO: 'https://github.com/davehorner/stableaudio-rs.git'
   STABLE_AUDIO_REF: 'main'
   CANDLE_VIDEO_REPO: 'https://github.com/davehorner/candle-video.git'
@@ -64,6 +66,8 @@ tasks:
         powershell -NoProfile -ExecutionPolicy Bypass -File scripts/setup-rust-deps.ps1
         -AcuneusRepo "{{.ACUNEUS_REPO}}"
         -AcuneusRef "{{.ACUNEUS_REF}}"
+        -AwispRepo "{{.AWISP_REPO}}"
+        -AwispRef "{{.AWISP_REF}}"
         -StableAudioRepo "{{.STABLE_AUDIO_REPO}}"
         -StableAudioRef "{{.STABLE_AUDIO_REF}}"
         -CandleVideoRepo "{{.CANDLE_VIDEO_REPO}}"
@@ -75,6 +79,7 @@ tasks:
       - >
         sh scripts/setup-rust-deps.sh
         "{{.ACUNEUS_REPO}}" "{{.ACUNEUS_REF}}"
+        "{{.AWISP_REPO}}" "{{.AWISP_REF}}"
         "{{.STABLE_AUDIO_REPO}}" "{{.STABLE_AUDIO_REF}}"
         "{{.CANDLE_VIDEO_REPO}}" "{{.CANDLE_VIDEO_REF}}"
 
@@ -223,19 +228,34 @@ tasks:
   # -------------------------------
   # Run helpers
   # -------------------------------
+  r:
+    desc: Run the already-built BespokeSynth_gen, forwarding command-line args after --
+    cmds:
+      - task: run:windows
+        vars:
+          CLI_ARGS: '{{.CLI_ARGS}}'
+      - task: run:posix
+        vars:
+          CLI_ARGS: '{{.CLI_ARGS}}'
+    silent: true
+
   run:
-    desc: Run BespokeSynth_gen (platform-aware)
+    desc: Build and run BespokeSynth_gen, forwarding command-line args after --
     cmds:
       - task: configure
       - task: build
       - task: run:windows
+        vars:
+          CLI_ARGS: '{{.CLI_ARGS}}'
       - task: run:posix
+        vars:
+          CLI_ARGS: '{{.CLI_ARGS}}'
     silent: true
 
   run:windows:
     platforms: [windows]
     cmds:
-      - powershell -NoProfile -ExecutionPolicy Bypass -Command "& (Join-Path (Get-Location) '{{.BUILD_DIR}}\Source\BespokeSynth_artefacts\{{.CONFIG}}\BespokeSynth_gen.exe')"
+      - powershell -NoProfile -ExecutionPolicy Bypass -Command "& (Join-Path (Get-Location) '{{.BUILD_DIR}}\Source\BespokeSynth_artefacts\{{.CONFIG}}\BespokeSynth_gen.exe') {{.CLI_ARGS}}"
 
   run:posix:
     platforms: [linux, darwin]
@@ -245,7 +265,7 @@ tasks:
         [ -x "$BIN" ] || BIN="{{.BUILD_DIR}}/Bespoke/BespokeSynth_gen"
         [ -x "$BIN" ] || BIN="{{.BUILD_DIR}}/BespokeSynth_gen"
         if [ -x "$BIN" ]; then
-          "$BIN"
+          "$BIN" {{.CLI_ARGS}}
         else
           echo "Executable not found. Did the build succeed?"
           exit 1

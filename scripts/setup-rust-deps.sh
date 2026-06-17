@@ -20,5 +20,6 @@ sync_dep() {
 }
 
 sync_dep acuneus "$1" "$2" libs/rust/acuneus
-sync_dep stableaudio-rs "$3" "$4" libs/rust/stableaudio-rs
-sync_dep candle-video "$5" "$6" libs/rust/candle-video
+sync_dep awisp "$3" "$4" libs/rust/awisp
+sync_dep stableaudio-rs "$5" "$6" libs/rust/stableaudio-rs
+sync_dep candle-video "$7" "$8" libs/rust/candle-video

@@ -24,11 +24,14 @@
 #include "PatchCable.h"
 #include "ADSRDisplay.h"
 #include "Acuneus.h"
+#include "Awisp.h"
 #include "CandleVideo.h"
 #include "StableAudio.h"
+#include "MpvPlayer.h"
 #include "QuickSpawnMenu.h"
 #include "AudioToCV.h"
 #include "ScriptModule.h"
+#include "AcuneusAutomation.h"
 #include "DrumPlayer.h"
 #include "VSTPlugin.h"
 #include "Prefab.h"
@@ -63,6 +66,10 @@ ModularSynth* TheSynth = nullptr;
 namespace
 {
    juce::String TheClipboard;
+   constexpr float kMpvSpawnStartX = 40.0f;
+   constexpr float kMpvSpawnStartY = 120.0f;
+   constexpr float kMpvSpawnOffsetX = 35.0f;
+   constexpr float kMpvSpawnOffsetY = 30.0f;
 }
 
 //static
@@ -299,6 +306,8 @@ void ModularSynth::Setup(juce::AudioDeviceManager* globalAudioDeviceManager, juc
    mConsoleListener = new ConsoleListener();
    mConsoleEntry = new TextEntry(mConsoleListener, "console", 0, 20, 50, mConsoleText);
    mConsoleEntry->SetRequireEnter(true);
+
+   ParseStartupCommandLine();
 }
 
 void ModularSynth::LoadResources()
@@ -343,6 +352,74 @@ std::string ModularSynth::GetWorkspaceDataPath()
    return ofToDataPath(filename);
 }
 
+void ModularSynth::ParseStartupCommandLine()
+{
+   const juce::StringArray args = JUCEApplication::getCommandLineParameterArray();
+   for (int i = 0; i < args.size(); ++i)
+   {
+      const juce::String arg = args[i];
+      juce::String media;
+      if (arg == "--mpv" || arg == "--mpv-url")
+      {
+         if (i + 1 < args.size())
+            media = args[++i];
+      }
+      else if (arg.startsWith("--mpv="))
+      {
+         media = arg.fromFirstOccurrenceOf("=", false, false);
+      }
+      else if (arg.startsWith("--mpv-url="))
+      {
+         media = arg.fromFirstOccurrenceOf("=", false, false);
+      }
+
+      if (media.isNotEmpty())
+         QueueMpvMedia(media.toStdString());
+   }
+}
+
+void ModularSynth::QueueMpvMedia(std::string media)
+{
+   if (media.empty())
+      return;
+
+   mQueuedMpvMedia.push_back(std::move(media));
+   mWantLoadMpvStartupPatch = true;
+}
+
+void ModularSynth::LoadMpvStartupPatch()
+{
+   if (mQueuedMpvMedia.empty())
+      return;
+
+   const std::string media = mQueuedMpvMedia.front();
+   mQueuedMpvMedia.erase(mQueuedMpvMedia.begin());
+
+   std::vector<IDrawableModule*> modules;
+   GetAllModules(modules);
+   int existingMpvPlayers = 0;
+   for (auto* module : modules)
+   {
+      if (dynamic_cast<MpvPlayer*>(module) != nullptr)
+         ++existingMpvPlayers;
+   }
+
+   ModuleFactory::Spawnable spawnable;
+   spawnable.mLabel = "mpvplayer";
+   const float x = kMpvSpawnStartX + existingMpvPlayers * kMpvSpawnOffsetX;
+   const float y = kMpvSpawnStartY + existingMpvPlayers * kMpvSpawnOffsetY;
+   auto* player = dynamic_cast<MpvPlayer*>(SpawnModuleOnTheFly(spawnable, x, y, true));
+   if (player != nullptr)
+   {
+      if (mWelcomeScreen != nullptr)
+         mWelcomeScreen->SetShowing(false);
+      player->OpenMedia(media, true);
+      LogEvent("mpvplayer opened " + media, kLogEventType_Verbose);
+   }
+
+   mWantLoadMpvStartupPatch = !mQueuedMpvMedia.empty();
+}
+
 static int sFrameCount = 0;
 void ModularSynth::Poll()
 {
@@ -380,31 +457,35 @@ void ModularSynth::Poll()
          mWantLoadAcuneusPatch = false;
       }
 
-      if (mWantLoadAcuneusShaderWalkPatch)
+      if (mWantLoadAcuneusAutomationPatch)
       {
          LoadLayoutFromFile(ofToDataPath(UserPrefs.layout.Get()));
 
-         ModuleFactory::Spawnable acuneusSpawnable;
-         acuneusSpawnable.mLabel = "acuneus";
-         auto* acuneus = dynamic_cast<Acuneus*>(SpawnModuleOnTheFly(acuneusSpawnable, 40, 120, true, "acuneus_shader_walk"));
-
-         ModuleFactory::Spawnable scriptSpawnable;
-         scriptSpawnable.mLabel = "script";
-         auto* script = dynamic_cast<ScriptModule*>(SpawnModuleOnTheFly(scriptSpawnable, 430, 120, true, "shader_walk_script"));
-
-         if (acuneus != nullptr)
-            acuneus->OpenInstance();
+         ModuleFactory::Spawnable automationSpawnable;
+         automationSpawnable.mLabel = "acuneus_automation";
+         auto* script = dynamic_cast<ScriptModule*>(SpawnModuleOnTheFly(automationSpawnable, 40, 120, true, "acuneus_automation"));
 
          if (script != nullptr)
          {
-            std::string scriptPath = ofToResourcePath("userdata_original/scripts/acuneus_shader_walk.py");
+            std::string scriptPath = ofToResourcePath("userdata_original/scripts/acuneus_automation.py");
             if (!juce::File(scriptPath).existsAsFile())
-               scriptPath = ofToDataPath("scripts/acuneus_shader_walk.py");
+               scriptPath = ofToDataPath("scripts/acuneus_automation.py");
             if (script->LoadScriptFile(scriptPath))
                script->ExecuteCode();
          }
 
-         mWantLoadAcuneusShaderWalkPatch = false;
+         if (auto* acuneus = dynamic_cast<Acuneus*>(FindModule("acuneus_automation_visualizer")))
+         {
+            acuneus->SetSelectedBinName("voronoi");
+            acuneus->EnableMusicAutomation(true);
+            acuneus->OpenInstance();
+         }
+         if (auto* stableAudio = dynamic_cast<StableAudio*>(FindModule("acuneus_automation_stableaudio")))
+            stableAudio->EnableAutoGenerationPatch();
+         if (auto* candleVideo = dynamic_cast<CandleVideo*>(FindModule("acuneus_automation_candlevideo")))
+            candleVideo->EnableAutoLoadPatch();
+
+         mWantLoadAcuneusAutomationPatch = false;
       }
 
       if (mWantLoadAcuneusStableAudioPatch)
@@ -549,6 +630,197 @@ void ModularSynth::Poll()
             candleVideo->EnableAutoLoadPatch();
 
          mWantLoadAcuneusYoutubePatch = false;
+      }
+
+      if (mWantLoadAwispPatch)
+      {
+         LoadLayoutFromFile(ofToDataPath(UserPrefs.layout.Get()));
+
+         ModuleFactory::Spawnable awispSpawnable;
+         awispSpawnable.mLabel = "awisp";
+         SpawnModuleOnTheFly(awispSpawnable, 40, 120);
+
+         mWantLoadAwispPatch = false;
+      }
+
+      if (mWantLoadAwispShaderWalkPatch)
+      {
+         LoadLayoutFromFile(ofToDataPath(UserPrefs.layout.Get()));
+
+         ModuleFactory::Spawnable awispSpawnable;
+         awispSpawnable.mLabel = "awisp";
+         SpawnModuleOnTheFly(awispSpawnable, 320, 120, true, "awisp_shader_walk_visualizer");
+
+         ModuleFactory::Spawnable scriptSpawnable;
+         scriptSpawnable.mLabel = "script";
+         auto* script = dynamic_cast<ScriptModule*>(SpawnModuleOnTheFly(scriptSpawnable, 40, 120, true, "awisp_shader_walk_controller"));
+
+         if (script != nullptr)
+         {
+            std::string scriptPath = ofToResourcePath("userdata_original/scripts/awisp_shader_walk.py");
+            if (!juce::File(scriptPath).existsAsFile())
+               scriptPath = ofToDataPath("scripts/awisp_shader_walk.py");
+            if (script->LoadScriptFile(scriptPath))
+               script->ExecuteCode();
+         }
+
+         mWantLoadAwispShaderWalkPatch = false;
+      }
+
+      if (mWantLoadAwispAutomationPatch)
+      {
+         LoadLayoutFromFile(ofToDataPath(UserPrefs.layout.Get()));
+
+         ModuleFactory::Spawnable loopbackSpawnable;
+         loopbackSpawnable.mLabel = "defaultoutput";
+         auto* loopback = SpawnModuleOnTheFly(loopbackSpawnable, 40, 120);
+
+         ModuleFactory::Spawnable awispSpawnable;
+         awispSpawnable.mLabel = "awisp";
+         auto* awisp = dynamic_cast<Awisp*>(SpawnModuleOnTheFly(awispSpawnable, 300, 120));
+
+         ModuleFactory::Spawnable gainSpawnable;
+         gainSpawnable.mLabel = "gain";
+         auto* gain = SpawnModuleOnTheFly(gainSpawnable, 660, 120);
+
+         ModuleFactory::Spawnable outputSpawnable;
+         outputSpawnable.mLabel = "output";
+         auto* output = SpawnModuleOnTheFly(outputSpawnable, 800, 120);
+
+         if (loopback != nullptr && awisp != nullptr)
+            loopback->GetPatchCableSource()->SetTarget(awisp);
+         if (awisp != nullptr && gain != nullptr)
+            awisp->GetPatchCableSource()->SetTarget(gain);
+         if (gain != nullptr && output != nullptr)
+            gain->GetPatchCableSource()->SetTarget(output);
+         if (awisp != nullptr)
+         {
+            awisp->SetSelectedShaderName("wisp/test_audio_fft.wgsl");
+            awisp->EnableMusicAutomation(true);
+            awisp->OpenInstance();
+         }
+
+         mWantLoadAwispAutomationPatch = false;
+      }
+
+      if (mWantLoadAwispStableAudioPatch)
+      {
+         LoadLayoutFromFile(ofToDataPath(UserPrefs.layout.Get()));
+
+         ModuleFactory::Spawnable stableAudioSpawnable;
+         stableAudioSpawnable.mLabel = "stableaudio";
+         auto* stableAudio = dynamic_cast<StableAudio*>(SpawnModuleOnTheFly(stableAudioSpawnable, 40, 120));
+
+         ModuleFactory::Spawnable awispSpawnable;
+         awispSpawnable.mLabel = "awisp";
+         auto* awisp = dynamic_cast<Awisp*>(SpawnModuleOnTheFly(awispSpawnable, 650, 120));
+
+         ModuleFactory::Spawnable gainSpawnable;
+         gainSpawnable.mLabel = "gain";
+         auto* gain = SpawnModuleOnTheFly(gainSpawnable, 1010, 120);
+
+         ModuleFactory::Spawnable outputSpawnable;
+         outputSpawnable.mLabel = "output";
+         auto* output = SpawnModuleOnTheFly(outputSpawnable, 1150, 120);
+
+         if (stableAudio != nullptr && awisp != nullptr)
+            stableAudio->GetPatchCableSource()->SetTarget(awisp);
+         if (awisp != nullptr && gain != nullptr)
+            awisp->GetPatchCableSource()->SetTarget(gain);
+         if (gain != nullptr && output != nullptr)
+            gain->GetPatchCableSource()->SetTarget(output);
+         if (awisp != nullptr)
+         {
+            awisp->SetSelectedShaderName("wisp/test_audio_fft.wgsl");
+            awisp->EnableMusicAutomation(true);
+            awisp->OpenInstance();
+         }
+         if (stableAudio != nullptr)
+            stableAudio->EnableAutoGenerationPatch();
+
+         mWantLoadAwispStableAudioPatch = false;
+      }
+
+      if (mWantLoadAwispCandleVideoPatch)
+      {
+         LoadLayoutFromFile(ofToDataPath(UserPrefs.layout.Get()));
+
+         ModuleFactory::Spawnable candleVideoSpawnable;
+         candleVideoSpawnable.mLabel = "candlevideo";
+         auto* candleVideo = dynamic_cast<CandleVideo*>(SpawnModuleOnTheFly(candleVideoSpawnable, 40, 120));
+
+         ModuleFactory::Spawnable awispSpawnable;
+         awispSpawnable.mLabel = "awisp";
+         auto* awisp = dynamic_cast<Awisp*>(SpawnModuleOnTheFly(awispSpawnable, 690, 120));
+
+         if (candleVideo != nullptr && awisp != nullptr)
+            candleVideo->GetPatchCableSource()->SetTarget(awisp);
+         if (candleVideo != nullptr)
+            candleVideo->EnableAutoLoadPatch();
+         if (awisp != nullptr)
+         {
+            awisp->SetSelectedShaderName("wisp/test_image.wgsl");
+            awisp->OpenInstance();
+         }
+
+         mWantLoadAwispCandleVideoPatch = false;
+      }
+
+      if (mWantLoadAwispYoutubePatch)
+      {
+         LoadLayoutFromFile(ofToDataPath(UserPrefs.layout.Get()));
+
+         ModuleFactory::Spawnable stableAudioSpawnable;
+         stableAudioSpawnable.mLabel = "stableaudio";
+         auto* stableAudio = dynamic_cast<StableAudio*>(SpawnModuleOnTheFly(stableAudioSpawnable, 40, 120));
+
+         ModuleFactory::Spawnable candleVideoSpawnable;
+         candleVideoSpawnable.mLabel = "candlevideo";
+         auto* candleVideo = dynamic_cast<CandleVideo*>(SpawnModuleOnTheFly(candleVideoSpawnable, 40, 360));
+
+         ModuleFactory::Spawnable awispSpawnable;
+         awispSpawnable.mLabel = "awisp";
+         auto* awisp = dynamic_cast<Awisp*>(SpawnModuleOnTheFly(awispSpawnable, 700, 120));
+
+         ModuleFactory::Spawnable gainSpawnable;
+         gainSpawnable.mLabel = "gain";
+         auto* gain = SpawnModuleOnTheFly(gainSpawnable, 1060, 120);
+
+         ModuleFactory::Spawnable outputSpawnable;
+         outputSpawnable.mLabel = "output";
+         auto* output = SpawnModuleOnTheFly(outputSpawnable, 1200, 120);
+
+         if (stableAudio != nullptr && awisp != nullptr)
+            stableAudio->GetPatchCableSource()->SetTarget(awisp);
+         if (candleVideo != nullptr && awisp != nullptr)
+            candleVideo->GetPatchCableSource()->SetTarget(awisp);
+         if (awisp != nullptr && gain != nullptr)
+            awisp->GetPatchCableSource()->SetTarget(gain);
+         if (gain != nullptr && output != nullptr)
+            gain->GetPatchCableSource()->SetTarget(output);
+
+         if (awisp != nullptr)
+         {
+            awisp->SetSelectedShaderName("wisp/test_audio_fft.wgsl");
+            awisp->EnableMusicAutomation(true);
+            awisp->OpenInstance();
+         }
+         if (stableAudio != nullptr)
+            stableAudio->EnableAutoGenerationPatch();
+         if (candleVideo != nullptr)
+            candleVideo->EnableAutoLoadPatch();
+
+         mWantLoadAwispYoutubePatch = false;
+      }
+
+      if (mWantLoadMpvStartupPatch)
+      {
+         if (mInitialized)
+         {
+            LoadMpvStartupPatch();
+            if (mQueuedMpvMedia.empty())
+               mWantLoadMpvStartupPatch = false;
+         }
       }
    }
 

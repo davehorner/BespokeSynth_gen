@@ -106,6 +106,16 @@ ScriptModule::ScriptModule()
 
 ScriptModule::~ScriptModule()
 {
+   Reset();
+
+   if (mScriptModuleIndex < sScriptModules.size() && sScriptModules[mScriptModuleIndex] == this)
+      sScriptModules[mScriptModuleIndex] = nullptr;
+
+   sScriptsRequestingInitExecution.remove(this);
+   if (sMostRecentLineExecutedModule == this)
+      sMostRecentLineExecutedModule = nullptr;
+   if (sPriorExecutedModule == this)
+      sPriorExecutedModule = nullptr;
 }
 
 void ScriptModule::CreateUIControls()
@@ -259,6 +269,7 @@ void ScriptModule::DrawModule()
    mBSlider->Draw();
    mCSlider->Draw();
    mDSlider->Draw();
+   DrawScriptModuleExtras();
 
    if (mIsScriptUntrusted)
    {
@@ -706,6 +717,8 @@ void ScriptModule::SendCCFromScript(int control, int value, int noteOutputIndex)
 
 bool ScriptModule::LoadScriptFile(std::string path)
 {
+   Stop();
+
    mLoadedScriptPath = path;
    File resourceFile = File(mLoadedScriptPath);
 
@@ -786,14 +799,17 @@ void ScriptModule::ScheduleUIControlValue(IUIControl* control, float value, doub
 
 void ScriptModule::HighlightLine(int lineNum, int scriptModuleIndex)
 {
+   if (scriptModuleIndex < 0 || scriptModuleIndex >= (int)sScriptModules.size() || sScriptModules[scriptModuleIndex] == nullptr)
+      return;
+
    ScriptModule* module = sScriptModules[scriptModuleIndex];
    if (module != sMostRecentLineExecutedModule || sPriorExecutedModule == nullptr)
    {
       sPriorExecutedModule = sMostRecentLineExecutedModule;
       sMostRecentLineExecutedModule = module;
    }
-   sScriptModules[scriptModuleIndex]->mNextLineToExecute = lineNum;
-   sScriptModules[scriptModuleIndex]->mLineExecuteTracker.AddEvent(lineNum);
+   module->mNextLineToExecute = lineNum;
+   module->mLineExecuteTracker.AddEvent(lineNum);
 }
 
 void ScriptModule::PrintText(std::string text)
@@ -1227,7 +1243,28 @@ std::pair<int, int> ScriptModule::RunScript(double time, int lineStart /*=-1*/, 
       return std::make_pair(0, 0);
    }
 
-   py::exec(GetThisName() + " = scriptmodule.get_me(" + ofToString(mScriptModuleIndex) + ")", py::globals());
+   if (lineStart == -1)
+      Stop();
+
+   try
+   {
+      py::globals()[GetThisName().c_str()] = py::cast(this, py::return_value_policy::reference);
+   }
+   catch (pybind11::error_already_set& e)
+   {
+      ofLog() << "python scriptmodule binding exception (error_already_set): " << e.what();
+      mLastError = (std::string)py::str(e.type()) + ": " + (std::string)py::str(e.value());
+      mCodeEntry->SetError(true);
+      return std::make_pair(0, 0);
+   }
+   catch (const std::exception& e)
+   {
+      ofLog() << "python scriptmodule binding exception: " << e.what();
+      mLastError = e.what();
+      mCodeEntry->SetError(true);
+      return std::make_pair(0, 0);
+   }
+
    std::string code = mCodeEntry->GetText(true);
    std::vector<std::string> lines = ofSplitString(code, "\n");
 
@@ -1540,6 +1577,7 @@ void ScriptModule::Resize(float w, float h)
    mBSlider->SetPosition(mBSlider->GetPosition(true).x, mBSlider->GetPosition(true).y + h - mHeight);
    mCSlider->SetPosition(mCSlider->GetPosition(true).x, mCSlider->GetPosition(true).y + h - mHeight);
    mDSlider->SetPosition(mDSlider->GetPosition(true).x, mDSlider->GetPosition(true).y + h - mHeight);
+   ResizeScriptModuleExtras(w - mWidth, h - mHeight);
    mWidth = w;
    mHeight = h;
 }

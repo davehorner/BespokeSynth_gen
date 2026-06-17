@@ -1,9 +1,5 @@
 import bespoke
-import ctypes
 import module
-import os
-import platform
-import sys
 
 # Walk the Acuneus shader dropdown from Python.
 #
@@ -22,7 +18,6 @@ HIDE_OVERLAY = True
 HIDE_TITLE_BAR = True
 
 status_lines = []
-acuneus_capi = None
 shader_count = FALLBACK_MAX_SHADERS
 
 
@@ -38,60 +33,14 @@ def _status(text):
       bespoke.set_background_text(status_text, 14, 20, 120, 0.85, 0.95, 1.0)
 
 
-def _candidate_capi_paths():
-   system = platform.system().lower()
-   if system == "windows":
-      library_name = "acuneus_capi.dll"
-   elif system == "darwin":
-      library_name = "libacuneus_capi.dylib"
-   else:
-      library_name = "libacuneus_capi.so"
-
-   candidates = [library_name]
-   candidates.append(os.path.join(os.getcwd(), library_name))
-   executable = getattr(sys, "executable", "")
-   if executable:
-      candidates.append(os.path.join(os.path.dirname(executable), library_name))
-   return candidates
-
-
-def _load_acuneus_capi():
-   global acuneus_capi
-
-   if acuneus_capi:
-      return acuneus_capi
-
-   last_error = None
-   for path in _candidate_capi_paths():
-      try:
-         directory = os.path.dirname(os.path.abspath(path))
-         if directory and hasattr(os, "add_dll_directory"):
-            os.add_dll_directory(directory)
-         capi = ctypes.CDLL(path)
-         capi.cuneus_bin_count.argtypes = []
-         capi.cuneus_bin_count.restype = ctypes.c_size_t
-         acuneus_capi = capi
-         return capi
-      except OSError as error:
-         last_error = error
-
-   _status("could not load acuneus capi: " + str(last_error))
-   return None
-
-
 def _get_shader_count():
-   count = int(bespoke.get_acuneus_shader_count())
-   if count > 0:
-      return count
-
-   capi = _load_acuneus_capi()
-   if not capi:
-      return FALLBACK_MAX_SHADERS
-
-   count = int(capi.cuneus_bin_count())
-   if count <= 0:
-      return FALLBACK_MAX_SHADERS
-   return count
+   try:
+      count = int(bespoke.get_acuneus_shader_count())
+      if count > 0:
+         return count
+   except Exception as error:
+      _status("could not query shader count: " + str(error))
+   return FALLBACK_MAX_SHADERS
 
 
 def _find_acuneus():
@@ -167,12 +116,10 @@ def start():
    global shader_count
 
    acuneus = _find_acuneus()
-   current_shader = START_INDEX
    if acuneus:
-      current_shader = int(acuneus.get("shader"))
       _hide_acuneus_chrome(acuneus)
    shader_count = _get_shader_count()
-   shader_index = max(START_INDEX, current_shader + 1)
+   shader_index = START_INDEX
    shader_walk_running = True
    _status("started, " + str(shader_count) + " shaders")
    acuneus_shader_walk_step()

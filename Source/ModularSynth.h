@@ -16,6 +16,7 @@
 #include "Minimap.h"
 #include "LockFreeQueue.h"
 #include <thread>
+#include <vector>
 
 #ifdef BESPOKE_LINUX
 #include <climits>
@@ -163,7 +164,15 @@ public:
    void LoadAcuneusCandleVideoPatch() { mWantLoadAcuneusCandleVideoPatch = true; }
    void LoadAcuneusSynthPatch() { mWantLoadAcuneusSynthPatch = true; }
    void LoadAcuneusYoutubePatch() { mWantLoadAcuneusYoutubePatch = true; }
-   void LoadAcuneusShaderWalkPatch() { mWantLoadAcuneusShaderWalkPatch = true; }
+   void LoadAcuneusAutomationPatch() { mWantLoadAcuneusAutomationPatch = true; }
+   void LoadAcuneusShaderWalkPatch() { LoadAcuneusAutomationPatch(); }
+   void LoadAwispPatch() { mWantLoadAwispPatch = true; }
+   void LoadAwispShaderWalkPatch() { mWantLoadAwispShaderWalkPatch = true; }
+   void LoadAwispAutomationPatch() { mWantLoadAwispAutomationPatch = true; }
+   void LoadAwispStableAudioPatch() { mWantLoadAwispStableAudioPatch = true; }
+   void LoadAwispCandleVideoPatch() { mWantLoadAwispCandleVideoPatch = true; }
+   void LoadAwispYoutubePatch() { mWantLoadAwispYoutubePatch = true; }
+   void QueueMpvMedia(std::string media);
    bool HasFatalError() { return mFatalError != ""; }
 
    void AddLissajousDrawer(IDrawableModule* module) { mLissajousDrawers.push_back(module); }
@@ -331,6 +340,8 @@ private:
    void DeleteAllModules();
    void TriggerClapboard();
    void DoAutosave();
+   void ParseStartupCommandLine();
+   void LoadMpvStartupPatch();
    void FindCircularDependencies();
    bool FindCircularDependencySearch(std::list<IAudioSource*> chain, IAudioSource* searchFrom);
    void ClearCircularDependencyMarkers();
@@ -436,7 +447,15 @@ private:
    bool mWantLoadAcuneusCandleVideoPatch{ false };
    bool mWantLoadAcuneusSynthPatch{ false };
    bool mWantLoadAcuneusYoutubePatch{ false };
-   bool mWantLoadAcuneusShaderWalkPatch{ false };
+   bool mWantLoadAcuneusAutomationPatch{ false };
+   bool mWantLoadAwispPatch{ false };
+   bool mWantLoadAwispShaderWalkPatch{ false };
+   bool mWantLoadAwispAutomationPatch{ false };
+   bool mWantLoadAwispStableAudioPatch{ false };
+   bool mWantLoadAwispCandleVideoPatch{ false };
+   bool mWantLoadAwispYoutubePatch{ false };
+   bool mWantLoadMpvStartupPatch{ false };
+   std::vector<std::string> mQueuedMpvMedia;
    std::string mCurrentSaveStatePath;
    std::string mStartupSaveStateFile;
 

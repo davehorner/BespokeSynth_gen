@@ -12,6 +12,7 @@
 #include <memory>
 #include "VSTScanner.h"
 #include "SynthGlobals.h"
+#include "ModularSynth.h"
 
 #include "VersionInfo.h"
 
@@ -25,6 +26,41 @@ using namespace juce;
 Component* createMainContentComponent();
 std::unique_ptr<juce::ApplicationProperties> appProperties;
 void SetStartupSaveStateFile(const String& bskPath, Component* mainComponent);
+
+namespace
+{
+bool HasSingleFlag(const StringArray& args)
+{
+   for (const auto& arg : args)
+   {
+      if (arg == "--single")
+         return true;
+   }
+   return false;
+}
+
+String ExtractMpvMedia(const StringArray& args)
+{
+   for (int i = 0; i < args.size(); ++i)
+   {
+      const String arg = args[i];
+      if (arg == "--mpv" || arg == "--mpv-url")
+      {
+         if (i + 1 < args.size())
+            return args[i + 1];
+      }
+      else if (arg.startsWith("--mpv="))
+      {
+         return arg.fromFirstOccurrenceOf("=", false, false);
+      }
+      else if (arg.startsWith("--mpv-url="))
+      {
+         return arg.fromFirstOccurrenceOf("=", false, false);
+      }
+   }
+   return {};
+}
+}
 
 juce::ApplicationProperties& getAppProperties()
 {
@@ -40,7 +76,7 @@ public:
 
    const String getApplicationName() override { return Bespoke::APP_NAME; }
    const String getApplicationVersion() override { return Bespoke::VERSION; }
-   bool moreThanOneInstanceAllowed() override { return true; }
+   bool moreThanOneInstanceAllowed() override { return !HasSingleFlag(JUCEApplication::getCommandLineParameterArray()); }
 
    //==============================================================================
    void initialise(const String& commandLine) override
@@ -63,6 +99,8 @@ public:
                       << "\n"
                       << "Options:\n"
                       << "  -o, --option <option> <value>   Temporarily override settings in preferences file\n"
+                      << "  --mpv <url-or-path>             Open media in an mpvplayer module\n"
+                      << "  --single                        With --mpv, add the media to the existing Bespoke instance\n"
                       << "  -h, --help                      Print help\n"
                       << "  -v, --version                   Print version\n"
                       << std::flush;
@@ -148,6 +186,11 @@ public:
       // This is also called when opening the app with a file.
       if (commandLine.isNotEmpty() && commandLine.endsWith(".bsk"))
          SetStartupSaveStateFile(commandLine, mainWindow->getContentComponent());
+
+      const StringArray args = StringArray::fromTokens(commandLine, true);
+      const String mpvMedia = ExtractMpvMedia(args);
+      if (mpvMedia.isNotEmpty() && TheSynth != nullptr)
+         TheSynth->QueueMpvMedia(mpvMedia.toStdString());
    }
 
    //==============================================================================

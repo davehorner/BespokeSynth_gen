@@ -136,6 +136,10 @@ public:
 
    bool IsEnabled() const override { return true; }
 
+protected:
+   virtual void DrawScriptModuleExtras() {}
+   virtual void ResizeScriptModuleExtras(float widthDelta, float heightDelta) {}
+
 private:
    void PlayNote(double time, float pitch, float velocity, float pan, int noteOutputIndex, int lineNum);
    void AdjustUIControl(IUIControl* control, float value, double time, int lineNum);

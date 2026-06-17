@@ -1494,14 +1494,25 @@ void StableAudio::AddAvailableModelLabels()
       mModelDropdown->AddLabel("medium", kModel_Medium);
 }
 
+std::string StableAudio::ResolveModelPath(const std::string& path) const
+{
+   if (path.empty())
+      return path;
+
+   if (juce::File::isAbsolutePath(path))
+      return path;
+
+   return ofToDataPath(path);
+}
+
 bool StableAudio::ModelFilesExist(const std::string& ditFilename, const std::string& decoderFilename) const
 {
    if (mModelDir.empty())
       return false;
 
-   return juce::File(mModelDir + "/" + ditFilename).existsAsFile() &&
-          juce::File(mModelDir + "/" + decoderFilename).existsAsFile() &&
-          juce::File(mModelDir + "/t5gemma-b-b-ul2-encoder.gguf").existsAsFile();
+   return juce::File(ResolveModelPath(mModelDir + "/" + ditFilename)).existsAsFile() &&
+          juce::File(ResolveModelPath(mModelDir + "/" + decoderFilename)).existsAsFile() &&
+          juce::File(ResolveModelPath(mModelDir + "/t5gemma-b-b-ul2-encoder.gguf")).existsAsFile();
 }
 
 void StableAudio::ApplyModelSelection()
@@ -1512,21 +1523,21 @@ void StableAudio::ApplyModelSelection()
    switch (mModelSelection)
    {
       case kModel_SmallSfx:
-         mDitPath = mModelDir + "/sa3-small-sfx-dit.gguf";
-         mDecoderPath = mModelDir + "/sa3-same-s-decoder.gguf";
+         mDitPath = ResolveModelPath(mModelDir + "/sa3-small-sfx-dit.gguf");
+         mDecoderPath = ResolveModelPath(mModelDir + "/sa3-same-s-decoder.gguf");
          break;
       case kModel_Medium:
-         mDitPath = mModelDir + "/sa3-medium-dit.gguf";
-         mDecoderPath = mModelDir + "/sa3-medium-same-l-decoder.gguf";
+         mDitPath = ResolveModelPath(mModelDir + "/sa3-medium-dit.gguf");
+         mDecoderPath = ResolveModelPath(mModelDir + "/sa3-medium-same-l-decoder.gguf");
          break;
       case kModel_SmallMusic:
       default:
-         mDitPath = mModelDir + "/sa3-small-music-dit.gguf";
-         mDecoderPath = mModelDir + "/sa3-small-music-same-s-decoder.gguf";
+         mDitPath = ResolveModelPath(mModelDir + "/sa3-small-music-dit.gguf");
+         mDecoderPath = ResolveModelPath(mModelDir + "/sa3-small-music-same-s-decoder.gguf");
          break;
    }
 
-   mTextEncoderPath = mModelDir + "/t5gemma-b-b-ul2-encoder.gguf";
+   mTextEncoderPath = ResolveModelPath(mModelDir + "/t5gemma-b-b-ul2-encoder.gguf");
    const float maxSeconds = GetSelectedModelMaxSeconds();
    mSeconds = std::clamp(mSeconds, 1.0f, maxSeconds);
    if (mSecondsSlider != nullptr)

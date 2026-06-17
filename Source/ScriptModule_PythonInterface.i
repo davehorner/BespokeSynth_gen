@@ -206,8 +206,10 @@ PYBIND11_EMBEDDED_MODULE(bespoke, m) {
 
 PYBIND11_EMBEDDED_MODULE(scriptmodule, m)
 {
-   m.def("get_me", [](int scriptModuleIndex)
+   m.def("get_me", [](int scriptModuleIndex) -> ScriptModule*
    {
+      if (scriptModuleIndex < 0 || scriptModuleIndex >= (int)ScriptModule::sScriptModules.size())
+         return nullptr;
       return ScriptModule::sScriptModules[scriptModuleIndex];
    }, py::return_value_policy::reference);
    py::class_<ScriptModule, IDrawableModule>(m, "scriptmodule")
@@ -945,6 +947,51 @@ PYBIND11_EMBEDDED_MODULE(module, m)
          const auto cableSource = module.GetPatchCableSource(cableSourceIndex);
          if (cableSource)
             cableSource->SetTarget(target);
+      })
+      .def("set_target", [](IDrawableModule& module, int cableSourceIndex, IDrawableModule* target)
+      {
+         const auto cableSource = module.GetPatchCableSource(cableSourceIndex);
+         if (cableSource)
+            cableSource->SetTarget(target);
+      })
+      .def("add_target", [](IDrawableModule& module, IDrawableModule* target)
+      {
+         auto* cableSource = module.GetPatchCableSource();
+         if (cableSource == nullptr || target == nullptr)
+            return;
+
+         for (auto* cable : cableSource->GetPatchCables())
+         {
+            if (cable != nullptr && cable->GetTarget() == target)
+               return;
+         }
+
+         cableSource->AddPatchCable(target);
+      })
+      .def("add_target", [](IDrawableModule& module, std::string targetPath)
+      {
+         IClickable* target = TheSynth->FindModule(targetPath);
+         if (target == nullptr)
+            target = TheSynth->FindUIControl(targetPath);
+         auto* cableSource = module.GetPatchCableSource();
+         if (cableSource == nullptr || target == nullptr)
+            return;
+
+         for (auto* cable : cableSource->GetPatchCables())
+         {
+            if (cable != nullptr && cable->GetTarget() == target)
+               return;
+         }
+
+         cableSource->AddPatchCable(target);
+      })
+      .def("clear_targets", [](IDrawableModule& module)
+      {
+         for (auto* source : module.GetPatchCableSources())
+         {
+            if (source != nullptr)
+               source->ClearPatchCables();
+         }
       })
       .def("get_target", [](IDrawableModule& module)
       {

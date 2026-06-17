@@ -44,6 +44,13 @@ extern "C" {
 #include <cmath>
 #include <set>
 
+#if BESPOKE_WINDOWS
+#include <windows.h>
+#undef LoadString
+#undef min
+#undef max
+#endif
+
 namespace
 {
    constexpr int kParamStartY = 166;
@@ -58,6 +65,27 @@ namespace
    constexpr int kMinRemotePort = 1024;
    constexpr int kMaxRemotePort = 65535;
    constexpr size_t kMaxPcmQueuedSamples = 44100 * 2;
+
+   void PumpPendingMouseMessagesAfterWindowMove()
+   {
+#if BESPOKE_WINDOWS
+      static int sMoveCount = 0;
+      ++sMoveCount;
+      if (sMoveCount % 4 != 0)
+         return;
+
+      MSG msg;
+      constexpr int kMaxMessagesToPump = 8;
+      for (int i = 0; i < kMaxMessagesToPump; ++i)
+      {
+         if (!PeekMessage(&msg, nullptr, WM_MOUSEFIRST, WM_MOUSELAST, PM_REMOVE))
+            break;
+
+         TranslateMessage(&msg);
+         DispatchMessage(&msg);
+      }
+#endif
+   }
 
 #ifndef BESPOKE_ACUNEUS_EXECUTABLE_DIR
 #define BESPOKE_ACUNEUS_EXECUTABLE_DIR ""
@@ -688,16 +716,48 @@ void Acuneus::OpenInstance()
    LoadSelectedWindowState();
    if (mWindowTitle.empty())
       mWindowTitle = GetDefaultTitleForBin(binName);
+   if (mAnchorWindow)
+   {
+      float anchoredX = 0;
+      float anchoredY = 0;
+      if (CalculateAnchoredWindowPosition(anchoredX, anchoredY, true))
+      {
+         mWindowX = anchoredX;
+         mWindowY = anchoredY;
+         if (mWindowXSlider != nullptr)
+            mWindowXSlider->SetValue(mWindowX, gTime, false);
+         if (mWindowYSlider != nullptr)
+            mWindowYSlider->SetValue(mWindowY, gTime, false);
+      }
+   }
+   const int startupWindowX = (int)std::round(mWindowX);
+   const int startupWindowY = (int)std::round(mWindowY);
+   const uint32_t startupWindowWidth = (uint32_t)std::round(std::max(1.0f, mWindowWidth));
+   const uint32_t startupWindowHeight = (uint32_t)std::round(std::max(1.0f, mWindowHeight));
+   const bool startupTitleBarVisible = mTitleBarVisible >= 0.5f;
    StartFeedbackReceiver();
+   std::string embeddedError;
+   bool openedEmbedded = false;
    if (mEmbedded)
-      mInstance = cuneus_instance_open_embedded_with_feedback(binName.c_str(), (uint16_t)mRemotePort, (uint16_t)mFeedbackPort);
-   else
-      mInstance = cuneus_instance_open_with_feedback(binName.c_str(), mExecutableDir.c_str(), (uint16_t)mRemotePort, (uint16_t)mFeedbackPort);
+   {
+      mInstance = cuneus_instance_open_embedded_with_feedback_at(binName.c_str(), (uint16_t)mRemotePort, (uint16_t)mFeedbackPort, startupWindowX, startupWindowY, startupWindowWidth, startupWindowHeight, startupTitleBarVisible);
+      if (mInstance != nullptr)
+      {
+         openedEmbedded = true;
+      }
+      else
+      {
+         const char* error = cuneus_last_error();
+         embeddedError = error != nullptr && error[0] != '\0' ? error : "embedded open failed";
+      }
+   }
+   if (mInstance == nullptr)
+      mInstance = cuneus_instance_open_with_feedback_at(binName.c_str(), mExecutableDir.c_str(), (uint16_t)mRemotePort, (uint16_t)mFeedbackPort, startupWindowX, startupWindowY, startupWindowWidth, startupWindowHeight, startupTitleBarVisible);
    if (mInstance == nullptr)
    {
       const char* error = cuneus_last_error();
       const std::string errorText = error != nullptr && error[0] != '\0' ? error : "failed to open Acuneus";
-      SetStatus(errorText);
+      SetStatus(!embeddedError.empty() ? embeddedError + "; fallback failed: " + errorText : errorText);
       ShowErrorDialog("Acuneus open failed", errorText);
       return;
    }
@@ -725,7 +785,10 @@ void Acuneus::OpenInstance()
    RefreshParamControls();
    mPendingDiscoveryRequests = 8;
    SendTransport();
-   SetStatus(std::string("opened ") + (mEmbedded ? "embedded " : "acuneus ") + DisplayShaderName(binName) + " osc " + std::to_string(mFeedbackPort));
+   std::string status = std::string("opened ") + (openedEmbedded ? "embedded " : "acuneus ") + DisplayShaderName(binName) + " osc " + std::to_string(mFeedbackPort);
+   if (!embeddedError.empty())
+      status += " (embedded fallback: " + embeddedError + ")";
+   SetStatus(status);
 #else
    SetStatus("BespokeSynth was built without Acuneus support");
 #endif
@@ -1344,7 +1407,10 @@ void Acuneus::ApplyWindowPosition()
    SaveSelectedWindowState();
 #if BESPOKE_ACUNEUS_ENABLED
    if (mInstance != nullptr && mOpenBinName == GetSelectedBinName())
+   {
       cuneus_set_window_position(mInstance, (int)std::round(mWindowX), (int)std::round(mWindowY));
+      PumpPendingMouseMessagesAfterWindowMove();
+   }
 #endif
 }
 
@@ -1781,6 +1847,12 @@ void Acuneus::CheckboxUpdated(Checkbox* checkbox, double time)
       SetMusicAutomationEnabled(mMusicAutomation);
       if (mMusicAutomationSlider != nullptr)
          mMusicAutomationSlider->SetValue(mMusicAutomationAmount, gTime, false);
+   }
+   if (checkbox == mEmbeddedCheckbox)
+   {
+      if (mInstance != nullptr)
+         OpenInstance();
+      return;
    }
    for (auto& param : mParams)
    {

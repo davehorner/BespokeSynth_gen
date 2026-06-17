@@ -56,7 +56,7 @@ namespace
    const float kSaveStateButtonWidth = 200;
    const float kSaveStateButtonHeight = 180;
    const float kSaveStateButtonStartX = 20;
-   const float kSaveStateButtonStartY = 110;
+   const float kSaveStateButtonStartY = 150;
    const float kSaveStateButtonPadX = 10;
    const float kSaveStateButtonPadY = 10;
 }
@@ -79,29 +79,31 @@ void WelcomeScreen::CreateUIControls()
    UIBLOCK(kSaveStateButtonStartX, 30);
    BUTTON(mNewPatchButton, "new patch");
    UIBLOCK_SHIFTRIGHT();
-   BUTTON(mAcuneusPatchButton, "acuneus");
-   UIBLOCK_SHIFTRIGHT();
-   BUTTON(mAcuneusShaderWalkPatchButton, "shader walk");
-   UIBLOCK_SHIFTRIGHT();
-   BUTTON(mAcuneusStableAudioPatchButton, "acuneus/stableaudio");
-   UIBLOCK_SHIFTRIGHT();
-   BUTTON(mAcuneusCandleVideoPatchButton, "acuneus/candlevideo");
-   UIBLOCK_SHIFTRIGHT();
-   BUTTON(mAcuneusSynthPatchButton, "acuneus/synth");
-   UIBLOCK_SHIFTRIGHT();
-   BUTTON(mAcuneusYoutubePatchButton, "audio/video demo");
-   UIBLOCK_SHIFTRIGHT();
    BUTTON(mLoadPatchButton, "load patch");
    UIBLOCK_SHIFTRIGHT();
    BUTTON(mShowHelpButton, "help");
    UIBLOCK_SHIFTRIGHT();
    BUTTON(mShowSettingsButton, "settings");
-   UIBLOCK_SHIFTRIGHT();
    ENDUIBLOCK0();
 
-   mDocsLinkButton = new ClickButton(this, "bespokesynth.com/docs", 111, 53);
-   mDiscordLinkButton = new ClickButton(this, "bespoke discord", 324, 53);
-   mTutorialVideoLinkButton = new ClickButton(this, "youtu.be/SYBc8X2IxqM", 176, 72);
+   mAcuneusPatchButton = new ClickButton(this, "acuneus", 80, 53);
+   mAcuneusShaderWalkPatchButton = new ClickButton(this, "shader walk", 142, 53);
+   mAcuneusAutomationPatchButton = new ClickButton(this, "automation", 235, 53);
+   mAcuneusStableAudioPatchButton = new ClickButton(this, "stableaudio", 326, 53);
+   mAcuneusCandleVideoPatchButton = new ClickButton(this, "candlevideo", 421, 53);
+   mAcuneusSynthPatchButton = new ClickButton(this, "synth", 520, 53);
+   mAcuneusYoutubePatchButton = new ClickButton(this, "audio/video demo", 577, 53);
+
+   mAwispPatchButton = new ClickButton(this, "awisp", 80, 77);
+   mAwispShaderWalkPatchButton = new ClickButton(this, "shader walk", 142, 77);
+   mAwispAutomationPatchButton = new ClickButton(this, "automation", 235, 77);
+   mAwispStableAudioPatchButton = new ClickButton(this, "stableaudio", 326, 77);
+   mAwispCandleVideoPatchButton = new ClickButton(this, "candlevideo", 421, 77);
+   mAwispYoutubePatchButton = new ClickButton(this, "audio/video demo", 520, 77);
+
+   mDocsLinkButton = new ClickButton(this, "bespokesynth.com/docs", 111, 104);
+   mDiscordLinkButton = new ClickButton(this, "bespoke discord", 324, 104);
+   mTutorialVideoLinkButton = new ClickButton(this, "youtu.be/SYBc8X2IxqM", 176, 123);
 
    mWidth = ofGetWidth() / TheSynth->GetUIScale() - 100;
    mHeight = ofGetHeight() / TheSynth->GetUIScale() - 200;
@@ -221,21 +223,30 @@ void WelcomeScreen::DrawModule()
    DrawTextBold("welcome to bespoke!", 15, 20, 18);
 
    mNewPatchButton->Draw();
+   mLoadPatchButton->Draw();
+   mShowHelpButton->Draw();
+   mShowSettingsButton->Draw();
    mAcuneusPatchButton->Draw();
    mAcuneusShaderWalkPatchButton->Draw();
+   mAcuneusAutomationPatchButton->Draw();
    mAcuneusStableAudioPatchButton->Draw();
    mAcuneusCandleVideoPatchButton->Draw();
    mAcuneusSynthPatchButton->Draw();
    mAcuneusYoutubePatchButton->Draw();
-   mLoadPatchButton->Draw();
-   mShowHelpButton->Draw();
-   mShowSettingsButton->Draw();
+   mAwispPatchButton->Draw();
+   mAwispShaderWalkPatchButton->Draw();
+   mAwispAutomationPatchButton->Draw();
+   mAwispStableAudioPatchButton->Draw();
+   mAwispCandleVideoPatchButton->Draw();
+   mAwispYoutubePatchButton->Draw();
 
-   DrawTextNormal("documentation:", 20, 65);
+   DrawTextNormal("acuneus:", 20, 65);
+   DrawTextNormal("awisp:", 20, 89);
+   DrawTextNormal("documentation:", 20, 116);
    mDocsLinkButton->Draw();
-   DrawTextNormal("join the ", 280, 65);
+   DrawTextNormal("join the ", 280, 116);
    mDiscordLinkButton->Draw();
-   DrawTextNormal("video overview available at:", 20, 84);
+   DrawTextNormal("video overview available at:", 20, 135);
    mTutorialVideoLinkButton->Draw();
 
    DrawTextBold("recent files:", kSaveStateButtonStartX, kSaveStateButtonStartY);
@@ -319,6 +330,8 @@ void WelcomeScreen::ButtonClicked(ClickButton* button, double time)
       TheSynth->LoadAcuneusPatch();
    if (button == mAcuneusShaderWalkPatchButton)
       TheSynth->LoadAcuneusShaderWalkPatch();
+   if (button == mAcuneusAutomationPatchButton)
+      TheSynth->LoadAcuneusAutomationPatch();
    if (button == mAcuneusStableAudioPatchButton)
       TheSynth->LoadAcuneusStableAudioPatch();
    if (button == mAcuneusCandleVideoPatchButton)
@@ -327,6 +340,18 @@ void WelcomeScreen::ButtonClicked(ClickButton* button, double time)
       TheSynth->LoadAcuneusSynthPatch();
    if (button == mAcuneusYoutubePatchButton)
       TheSynth->LoadAcuneusYoutubePatch();
+   if (button == mAwispPatchButton)
+      TheSynth->LoadAwispPatch();
+   if (button == mAwispShaderWalkPatchButton)
+      TheSynth->LoadAwispShaderWalkPatch();
+   if (button == mAwispAutomationPatchButton)
+      TheSynth->LoadAwispAutomationPatch();
+   if (button == mAwispStableAudioPatchButton)
+      TheSynth->LoadAwispStableAudioPatch();
+   if (button == mAwispCandleVideoPatchButton)
+      TheSynth->LoadAwispCandleVideoPatch();
+   if (button == mAwispYoutubePatchButton)
+      TheSynth->LoadAwispYoutubePatch();
    if (button == mLoadPatchButton)
       TheSynth->LoadStatePopup();
    if (button == mShowHelpButton)

@@ -37,6 +37,7 @@
 #endif
 
 class Acuneus;
+class Awisp;
 class IAudioReceiver;
 
 class CandleVideo : public IAudioSource, public IDrawableModule, public IFloatSliderListener, public IIntSliderListener, public IDropdownListener, public IButtonListener, public ITextEntryListener
@@ -69,7 +70,7 @@ public:
    void SetUpFromSaveData() override;
    void SaveState(FileStreamOut& out) override;
    void LoadState(FileStreamIn& in, int rev) override;
-   int GetModuleSaveStateRev() const override { return 6; }
+   int GetModuleSaveStateRev() const override { return 7; }
    std::vector<IUIControl*> ControlsToIgnoreInSaveState() const override;
 
 private:
@@ -109,7 +110,11 @@ private:
    void LoadSelectedVideo();
    void LoadVideoIntoTarget(const std::string& path);
    std::vector<Acuneus*> GetTargetAcuneusModules();
+   std::vector<Awisp*> GetTargetAwispModules();
    void CollectTargetAcuneusModules(IAudioReceiver* receiver, std::vector<Acuneus*>& acuneusModules, std::set<IAudioReceiver*>& visited);
+   void CollectTargetAwispModules(IAudioReceiver* receiver, std::vector<Awisp*>& awispModules, std::set<IAudioReceiver*>& visited);
+   std::string BuildAwispImageInputPath(const std::string& videoPath);
+   std::vector<std::string> BuildAwispImageInputFrames(const std::string& videoPath, int frameCount);
    void UnloadTargetMediaIfNeeded(const std::vector<std::string>& deletingPaths);
    bool DeleteFileWithRetries(const std::string& path) const;
    void DeleteSelectedGeneratedVideo();
@@ -182,6 +187,7 @@ private:
    bool mAutonext{ false };
    bool mAutoplay{ false };
    bool mUseMetadataVideoLabels{ true };
+   bool mAwispPoster{ true };
    int mGeneratedVideoIndex{ -1 };
    int mPromptChoice{ -1 };
 
@@ -198,6 +204,7 @@ private:
    ClickButton* mGenerateButton{ nullptr };
    ClickButton* mLoadButton{ nullptr };
    Checkbox* mAutoloadCheckbox{ nullptr };
+   Checkbox* mAwispPosterCheckbox{ nullptr };
    Checkbox* mAutonextCheckbox{ nullptr };
    ClickButton* mDeleteVideoButton{ nullptr };
    ClickButton* mDeleteAllVideosButton{ nullptr };

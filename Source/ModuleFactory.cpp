@@ -95,6 +95,7 @@
 #include "SignalGenerator.h"
 #include "Lissajous.h"
 #include "DebugAudioSource.h"
+#include "DefaultOutputLoopback.h"
 #include "TimerDisplay.h"
 #include "DrumSynth.h"
 //#include "EigenChorder.h"
@@ -284,7 +285,10 @@
 #include "AudioSyncer.h"
 #include "StableAudio.h"
 #include "CandleVideo.h"
+#include "MpvPlayer.h"
 #include "Acuneus.h"
+#include "AcuneusAutomation.h"
+#include "Awisp.h"
 
 #include <juce_core/juce_core.h>
 
@@ -524,7 +528,11 @@ ModuleFactory::ModuleFactory()
    REGISTER(AudioSyncer, audiosyncer, kModuleCategory_Audio);
    REGISTER(StableAudio, stableaudio, kModuleCategory_Synth);
    REGISTER(CandleVideo, candlevideo, kModuleCategory_Other);
+   REGISTER(MpvPlayer, mpvplayer, kModuleCategory_Other);
    REGISTER(Acuneus, acuneus, kModuleCategory_Other);
+   REGISTER(AcuneusAutomation, acuneus_automation, kModuleCategory_Other);
+   REGISTER(Awisp, awisp, kModuleCategory_Other);
+   REGISTER(DefaultOutputLoopback, defaultoutput, kModuleCategory_Audio);
 
    //REGISTER_EXPERIMENTAL(MidiPlayer, midiplayer, kModuleCategory_Instrument);
    REGISTER_HIDDEN(Autotalent, autotalent, kModuleCategory_Audio);

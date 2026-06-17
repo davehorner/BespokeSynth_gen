@@ -6,6 +6,7 @@ param(
 $ErrorActionPreference = "Stop"
 
 $repoRoot = (Get-Location).Path
+$sln = Join-Path $repoRoot "$BuildDir\BespokeSynth_gen.sln"
 $exe = Join-Path $repoRoot "$BuildDir\Source\BespokeSynth_artefacts\$Config\BespokeSynth_gen.exe"
 if (!(Test-Path $exe)) {
    throw "Executable not found: $exe"
@@ -26,7 +27,13 @@ if (Test-Path $vswhere) {
 }
 
 if ($devenv) {
-   Write-Host "Launching under Visual Studio debugger: $exe"
+   if (Test-Path $sln) {
+      Write-Host "Launching generated Visual Studio solution under debugger: $sln"
+      & $devenv $sln /Run "$Config|x64"
+      exit $LASTEXITCODE
+   }
+
+   Write-Host "Generated solution not found. Launching under Visual Studio debugger: $exe"
    & $devenv /debugexe $exe
    exit $LASTEXITCODE
 }

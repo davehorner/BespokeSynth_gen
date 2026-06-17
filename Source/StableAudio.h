@@ -148,6 +148,7 @@ private:
    void AddAvailableModelLabels();
    void ApplyModelSelection();
    void RefreshModelPathEntries();
+   std::string ResolveModelPath(const std::string& path) const;
    bool ModelFilesExist(const std::string& ditFilename, const std::string& decoderFilename) const;
    float GetSelectedModelMaxSeconds() const;
    float GetMaxCrossfadeSeconds() const;

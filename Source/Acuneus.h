@@ -203,7 +203,7 @@ private:
    int mFeedbackPort{ 7842 };
    int mReservedRemotePort{ 0 };
    int mReservedFeedbackPort{ 0 };
-   bool mEmbedded{ false };
+   bool mEmbedded{ true };
    bool mAnchorWindow{ true };
    float mOverlayVisible{ 1.0f };
    float mTitleBarVisible{ 1.0f };

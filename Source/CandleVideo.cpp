@@ -10,6 +10,7 @@
 
 #include "CandleVideo.h"
 #include "Acuneus.h"
+#include "Awisp.h"
 #include "AudioSplitter.h"
 #include "FileStream.h"
 #include "IAudioReceiver.h"
@@ -46,6 +47,22 @@ bool HasCandleVideoWeights(const juce::File& directory)
    return directory.getChildFile("ltxv-2b-0.9.8-distilled.safetensors").existsAsFile();
 }
 
+std::string ResolveCandleVideoPath(const std::string& path)
+{
+   if (path.empty() || juce::File::isAbsolutePath(path))
+      return path;
+
+   const juce::File workingDirPath = juce::File::getCurrentWorkingDirectory().getChildFile(path);
+   if (workingDirPath.exists())
+      return workingDirPath.getFullPathName().replace("\\", "/").toStdString();
+
+   std::string dataPath = ofToDataPath(path);
+   if (juce::File(dataPath).exists())
+      return dataPath;
+
+   return ofToResourcePath(path);
+}
+
 bool IsRustCheckoutModelPath(const std::string& path)
 {
    const juce::String normalized = juce::String(path).replace("\\", "/").toLowerCase();
@@ -61,7 +78,13 @@ std::string GetCargoTargetDir(const juce::File& manifest)
 {
    const char* overrideDir = std::getenv("BESPOKE_CANDLE_VIDEO_CARGO_TARGET_DIR");
    if (overrideDir != nullptr && overrideDir[0] != '\0')
-      return juce::File(overrideDir).getFullPathName().replace("\\", "/").toStdString();
+   {
+      const juce::String overridePath(overrideDir);
+      const juce::File targetDir = juce::File::isAbsolutePath(overridePath)
+                                      ? juce::File(overridePath)
+                                      : juce::File::getCurrentWorkingDirectory().getChildFile(overridePath);
+      return targetDir.getFullPathName().replace("\\", "/").toStdString();
+   }
 
    return GetRepoRoot(manifest).getChildFile("libs").getChildFile("rust").getChildFile("cv-t").getFullPathName().replace("\\", "/").toStdString();
 }
@@ -126,6 +149,8 @@ void CandleVideo::CreateUIControls()
    CHECKBOX(mUseMetadataVideoLabelsCheckbox, "details", &mUseMetadataVideoLabels);
    UIBLOCK_SHIFTRIGHT();
    CHECKBOX(mAutoloadCheckbox, "autoload", &mAutoload);
+   UIBLOCK_SHIFTRIGHT();
+   CHECKBOX(mAwispPosterCheckbox, "poster", &mAwispPoster);
    UIBLOCK_SHIFTRIGHT();
    CHECKBOX(mCpuCheckbox, "cpu", &mCpu);
    UIBLOCK_NEWLINE();
@@ -292,6 +317,9 @@ CandleVideo::GenerationResult CandleVideo::GenerateToFile(std::string prompt, st
 {
    GenerationResult result;
    result.prompt = prompt;
+   root = ResolveCandleVideoPath(root);
+   weights = ResolveCandleVideoPath(weights);
+   outputDir = ResolveCandleVideoPath(outputDir);
 
    const juce::File manifest = juce::File(root).getChildFile("Cargo.toml");
    if (!manifest.existsAsFile())
@@ -517,25 +545,26 @@ std::string CandleVideo::GetGeneratedVideoDirectory() const
 
 std::string CandleVideo::GetDefaultRoot() const
 {
-   const juce::File configuredRoot(BESPOKE_CANDLE_VIDEO_DEFAULT_ROOT);
+   const juce::File configuredRoot(ResolveCandleVideoPath(BESPOKE_CANDLE_VIDEO_DEFAULT_ROOT));
    if (configuredRoot.getChildFile("Cargo.toml").existsAsFile())
       return configuredRoot.getFullPathName().replace("\\", "/").toStdString();
-   return "libs/rust/candle-video";
+   return ResolveCandleVideoPath("libs/rust/candle-video");
 }
 
 std::string CandleVideo::GetDefaultWeights() const
 {
-   const juce::File configuredWeights(BESPOKE_CANDLE_VIDEO_DEFAULT_WEIGHTS);
+   const juce::File configuredWeights(ResolveCandleVideoPath(BESPOKE_CANDLE_VIDEO_DEFAULT_WEIGHTS));
    if (HasCandleVideoWeights(configuredWeights))
       return configuredWeights.getFullPathName().replace("\\", "/").toStdString();
 
    const std::string topLevelWeights = "models/ltx-video";
-   if (HasCandleVideoWeights(juce::File(topLevelWeights)))
-      return topLevelWeights;
+   const std::string resolvedTopLevelWeights = ResolveCandleVideoPath(topLevelWeights);
+   if (HasCandleVideoWeights(juce::File(resolvedTopLevelWeights)))
+      return resolvedTopLevelWeights;
 
    if (configuredWeights.getFullPathName().isNotEmpty())
       return configuredWeights.getFullPathName().replace("\\", "/").toStdString();
-   return topLevelWeights;
+   return resolvedTopLevelWeights;
 }
 
 std::string CandleVideo::GetDefaultUnifiedWeights() const
@@ -1249,10 +1278,12 @@ void CandleVideo::DeleteAllGeneratedVideos()
 void CandleVideo::LoadVideoIntoTarget(const std::string& path)
 {
    const bool targetIsDirectAcuneus = dynamic_cast<Acuneus*>(GetTarget()) != nullptr;
+   const bool targetIsDirectAwisp = dynamic_cast<Awisp*>(GetTarget()) != nullptr;
    const std::vector<Acuneus*> acuneusModules = GetTargetAcuneusModules();
-   if (acuneusModules.empty())
+   const std::vector<Awisp*> awispModules = GetTargetAwispModules();
+   if (acuneusModules.empty() && awispModules.empty())
    {
-      AppendStatusText("\nconnect to an acuneus module, or to an audio splitter that targets acuneus modules");
+      AppendStatusText("\nconnect to an acuneus or awisp module, or to an audio splitter that targets visual modules");
       return;
    }
 
@@ -1278,9 +1309,40 @@ void CandleVideo::LoadVideoIntoTarget(const std::string& path)
       ++loadedCount;
    }
 
+   int awispLoadedCount = 0;
+   if (!awispModules.empty())
+   {
+      const std::string awispImagePath = mAwispPoster ? BuildAwispImageInputPath(path) : "";
+      const std::vector<std::string> awispFramePaths = mAwispPoster ? std::vector<std::string>() : BuildAwispImageInputFrames(path, 24);
+      if (mAwispPoster && awispImagePath.empty())
+      {
+         AppendStatusText("\ncouldn't extract image frame for awisp");
+      }
+      else if (!mAwispPoster && awispFramePaths.empty())
+      {
+         AppendStatusText("\ncouldn't extract image frames for awisp");
+      }
+      else
+      {
+         for (auto* awisp : awispModules)
+         {
+            if (awisp == nullptr)
+               continue;
+            if (targetIsDirectAwisp)
+               awisp->OpenInstance();
+            const bool loaded = mAwispPoster ? awisp->SetMediaPath(awispImagePath) : awisp->SetMediaFrames(awispFramePaths, (float)std::max(1, mFps));
+            if (loaded)
+            {
+               ++awispLoadedCount;
+               ++loadedCount;
+            }
+         }
+      }
+   }
+
    if (loadedCount == 0)
    {
-      AppendStatusText("\nno open acuneus modules behind splitter");
+      AppendStatusText("\nno open visual modules behind splitter");
       if (skippedClosedCount > 0)
          AppendStatusText(" (" + ofToString(skippedClosedCount) + " closed)");
       return;
@@ -1296,8 +1358,10 @@ void CandleVideo::LoadVideoIntoTarget(const std::string& path)
       }
    }
    AppendStatusText("\nloaded " + juce::File(path).getFileName().toStdString());
-   if (loadedCount > 1)
-      AppendStatusText(" into " + ofToString(loadedCount) + " acuneus modules");
+   if ((int)acuneusModules.size() + (int)awispModules.size() > 1)
+      AppendStatusText(" into " + ofToString(loadedCount) + " visual modules");
+   if (awispLoadedCount > 0)
+      AppendStatusText(" (" + ofToString(awispLoadedCount) + (mAwispPoster ? " awisp poster inputs)" : " awisp frame inputs)"));
    if (skippedClosedCount > 0)
       AppendStatusText(" (" + ofToString(skippedClosedCount) + " closed skipped)");
 
@@ -1315,6 +1379,14 @@ std::vector<Acuneus*> CandleVideo::GetTargetAcuneusModules()
    std::set<IAudioReceiver*> visited;
    CollectTargetAcuneusModules(GetTarget(), acuneusModules, visited);
    return acuneusModules;
+}
+
+std::vector<Awisp*> CandleVideo::GetTargetAwispModules()
+{
+   std::vector<Awisp*> awispModules;
+   std::set<IAudioReceiver*> visited;
+   CollectTargetAwispModules(GetTarget(), awispModules, visited);
+   return awispModules;
 }
 
 void CandleVideo::CollectTargetAcuneusModules(IAudioReceiver* receiver, std::vector<Acuneus*>& acuneusModules, std::set<IAudioReceiver*>& visited)
@@ -1337,6 +1409,134 @@ void CandleVideo::CollectTargetAcuneusModules(IAudioReceiver* receiver, std::vec
    }
 }
 
+void CandleVideo::CollectTargetAwispModules(IAudioReceiver* receiver, std::vector<Awisp*>& awispModules, std::set<IAudioReceiver*>& visited)
+{
+   if (receiver == nullptr || visited.find(receiver) != visited.end())
+      return;
+   visited.insert(receiver);
+
+   if (auto* awisp = dynamic_cast<Awisp*>(receiver))
+   {
+      if (std::find(awispModules.begin(), awispModules.end(), awisp) == awispModules.end())
+         awispModules.push_back(awisp);
+      return;
+   }
+
+   if (auto* splitter = dynamic_cast<AudioSplitter*>(receiver))
+   {
+      for (int i = 0; i < splitter->GetNumTargets(); ++i)
+         CollectTargetAwispModules(splitter->GetTarget(i), awispModules, visited);
+   }
+}
+
+std::string CandleVideo::BuildAwispImageInputPath(const std::string& videoPath)
+{
+   const juce::File source(videoPath);
+   if (!source.existsAsFile())
+      return "";
+
+   const juce::String extension = source.getFileExtension().toLowerCase();
+   if (extension == ".png" || extension == ".jpg" || extension == ".jpeg")
+      return source.getFullPathName().replace("\\", "/").toStdString();
+
+   const juce::File output = source.withFileExtension(".awisp.png");
+   juce::String ffmpegPath(GetFfprobeExecutable());
+   ffmpegPath = ffmpegPath.replace("ffprobe", "ffmpeg");
+   const juce::File ffmpeg(ffmpegPath);
+   juce::StringArray args;
+   args.add(ffmpeg.existsAsFile() ? ffmpeg.getFullPathName() : "ffmpeg");
+   args.add("-y");
+   args.add("-i");
+   args.add(source.getFullPathName());
+   args.add("-frames:v");
+   args.add("1");
+   args.add(output.getFullPathName());
+
+   juce::ChildProcess process;
+   if (!process.start(args))
+      return "";
+
+   const int64_t startMs = juce::Time::getMillisecondCounterHiRes();
+   while (process.isRunning())
+   {
+      if (juce::Time::getMillisecondCounterHiRes() - startMs > 15000)
+      {
+         process.kill();
+         return "";
+      }
+      juce::Thread::sleep(25);
+   }
+
+   if (!output.existsAsFile())
+      return "";
+
+   return output.getFullPathName().replace("\\", "/").toStdString();
+}
+
+std::vector<std::string> CandleVideo::BuildAwispImageInputFrames(const std::string& videoPath, int frameCount)
+{
+   const juce::File source(videoPath);
+   if (!source.existsAsFile())
+      return {};
+
+   const juce::String extension = source.getFileExtension().toLowerCase();
+   if (extension == ".png" || extension == ".jpg" || extension == ".jpeg")
+      return { source.getFullPathName().replace("\\", "/").toStdString() };
+
+   frameCount = std::clamp(frameCount, 1, 96);
+   const juce::File outputDir = source.getParentDirectory().getChildFile(source.getFileNameWithoutExtension() + ".awisp_frames");
+   if (!outputDir.createDirectory())
+      return {};
+
+   juce::Array<juce::File> staleFrames;
+   outputDir.findChildFiles(staleFrames, juce::File::findFiles, false, "*.png");
+   for (auto& file : staleFrames)
+      file.deleteFile();
+
+   const double durationSeconds = std::max(0.25, GetVideoDurationSeconds(videoPath));
+   const double sampleRate = std::clamp((double)frameCount / durationSeconds, 1.0, 60.0);
+   const juce::File outputPattern = outputDir.getChildFile("frame_%03d.png");
+   juce::String ffmpegPath(GetFfprobeExecutable());
+   ffmpegPath = ffmpegPath.replace("ffprobe", "ffmpeg");
+   const juce::File ffmpeg(ffmpegPath);
+   juce::StringArray args;
+   args.add(ffmpeg.existsAsFile() ? ffmpeg.getFullPathName() : "ffmpeg");
+   args.add("-y");
+   args.add("-i");
+   args.add(source.getFullPathName());
+   args.add("-vf");
+   args.add("fps=" + juce::String(sampleRate, 6));
+   args.add("-frames:v");
+   args.add(juce::String(frameCount));
+   args.add(outputPattern.getFullPathName());
+
+   juce::ChildProcess process;
+   if (!process.start(args))
+      return {};
+
+   const int64_t startMs = juce::Time::getMillisecondCounterHiRes();
+   while (process.isRunning())
+   {
+      if (juce::Time::getMillisecondCounterHiRes() - startMs > 30000)
+      {
+         process.kill();
+         return {};
+      }
+      juce::Thread::sleep(25);
+   }
+
+   std::vector<std::string> frames;
+   frames.reserve((size_t)frameCount);
+   for (int i = 1; i <= frameCount; ++i)
+   {
+      const juce::File frame = outputDir.getChildFile(juce::String::formatted("frame_%03d.png", i));
+      if (frame.existsAsFile())
+         frames.push_back(frame.getFullPathName().replace("\\", "/").toStdString());
+   }
+
+   return frames;
+}
+
 void CandleVideo::UnloadTargetMediaIfNeeded(const std::vector<std::string>& deletingPaths)
 {
    if (mLoadedVideoPath.empty())
@@ -1357,6 +1557,13 @@ void CandleVideo::UnloadTargetMediaIfNeeded(const std::vector<std::string>& dele
       if (acuneus == nullptr)
          continue;
       acuneus->UnloadMedia();
+   }
+   const std::vector<Awisp*> awispModules = GetTargetAwispModules();
+   for (auto* awisp : awispModules)
+   {
+      if (awisp == nullptr)
+         continue;
+      awisp->UnloadMedia();
    }
 
    mLoadedVideoPath.clear();
@@ -1470,6 +1677,7 @@ void CandleVideo::DrawModule()
    mDeleteAllVideosButton->Draw();
    mUseMetadataVideoLabelsCheckbox->Draw();
    mAutoloadCheckbox->Draw();
+   mAwispPosterCheckbox->Draw();
    mCpuCheckbox->Draw();
    mPromptEntry->Draw();
    mPromptDropdown->Draw();
@@ -1665,6 +1873,7 @@ void CandleVideo::SaveState(FileStreamOut& out)
    out << mAutoplay;
    out << mAutonext;
    out << mUseMetadataVideoLabels;
+   out << mAwispPoster;
 }
 
 void CandleVideo::LoadState(FileStreamIn& in, int rev)
@@ -1690,7 +1899,7 @@ void CandleVideo::LoadState(FileStreamIn& in, int rev)
       in >> mCpu;
       in >> mAutoload;
    }
-   if (mWeights.empty() || (IsRustCheckoutModelPath(mWeights) && !HasCandleVideoWeights(juce::File(mWeights))))
+   if (mWeights.empty() || (IsRustCheckoutModelPath(mWeights) && !HasCandleVideoWeights(juce::File(ResolveCandleVideoPath(mWeights)))))
       mWeights = GetDefaultWeights();
    if (mCargoFeatures.empty())
       mCargoFeatures = BESPOKE_CANDLE_VIDEO_DEFAULT_FEATURES;
@@ -1701,6 +1910,10 @@ void CandleVideo::LoadState(FileStreamIn& in, int rev)
       in >> mAutonext;
       in >> mUseMetadataVideoLabels;
    }
+   if (rev >= 7)
+      in >> mAwispPoster;
+   else
+      mAwispPoster = true;
 
    SetPromptText(mPrompt);
    if (mRootEntry != nullptr)

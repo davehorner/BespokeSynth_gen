@@ -1,6 +1,8 @@
 param(
    [Parameter(Mandatory = $true)] [string] $AcuneusRepo,
    [Parameter(Mandatory = $true)] [string] $AcuneusRef,
+   [Parameter(Mandatory = $true)] [string] $AwispRepo,
+   [Parameter(Mandatory = $true)] [string] $AwispRef,
    [Parameter(Mandatory = $true)] [string] $StableAudioRepo,
    [Parameter(Mandatory = $true)] [string] $StableAudioRef,
    [Parameter(Mandatory = $true)] [string] $CandleVideoRepo,
@@ -35,5 +37,6 @@ function Sync-Dep($Name, $Repo, $Ref, $Path) {
 }
 
 Sync-Dep "acuneus" $AcuneusRepo $AcuneusRef "libs/rust/acuneus"
+Sync-Dep "awisp" $AwispRepo $AwispRef "libs/rust/awisp"
 Sync-Dep "stableaudio-rs" $StableAudioRepo $StableAudioRef "libs/rust/stableaudio-rs"
 Sync-Dep "candle-video" $CandleVideoRepo $CandleVideoRef "libs/rust/candle-video"

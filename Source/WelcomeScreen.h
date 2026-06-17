@@ -94,10 +94,17 @@ private:
    ClickButton* mNewPatchButton{ nullptr };
    ClickButton* mAcuneusPatchButton{ nullptr };
    ClickButton* mAcuneusShaderWalkPatchButton{ nullptr };
+   ClickButton* mAcuneusAutomationPatchButton{ nullptr };
    ClickButton* mAcuneusStableAudioPatchButton{ nullptr };
    ClickButton* mAcuneusCandleVideoPatchButton{ nullptr };
    ClickButton* mAcuneusSynthPatchButton{ nullptr };
    ClickButton* mAcuneusYoutubePatchButton{ nullptr };
+   ClickButton* mAwispPatchButton{ nullptr };
+   ClickButton* mAwispShaderWalkPatchButton{ nullptr };
+   ClickButton* mAwispAutomationPatchButton{ nullptr };
+   ClickButton* mAwispStableAudioPatchButton{ nullptr };
+   ClickButton* mAwispCandleVideoPatchButton{ nullptr };
+   ClickButton* mAwispYoutubePatchButton{ nullptr };
    ClickButton* mLoadPatchButton{ nullptr };
    ClickButton* mShowHelpButton{ nullptr };
    ClickButton* mShowSettingsButton{ nullptr };

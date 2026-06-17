@@ -4,7 +4,7 @@
 
 # BespokeSynth_gen
 
-This is the `_gen` fork of Bespoke Synth. It keeps the original modular synth workflow and adds local generative media patches that connect Bespoke audio, Acuneus GPU windows, StableAudio music generation, CandleVideo video generation, and Ollama prompt generation.
+This is the [`davehorner/BespokeSynth_gen`](https://github.com/davehorner/BespokeSynth_gen) `_gen` fork of Bespoke Synth. It keeps the original modular synth workflow and adds local generative media patches that connect Bespoke audio, Acuneus GPU windows, Awisp/Wisp shader windows, StableAudio music generation, CandleVideo video generation, and Ollama prompt generation.
 
 Upstream Bespoke Synth is a software modular synth that Ryan Challinor has been building since 2011.
 
@@ -43,6 +43,7 @@ Join the [Bespoke Discord](https://discord.gg/YdTMkvvpZZ) for support and to dis
 * Python livecoding
 * MIDI & OSC controller mapping
 * optional Acuneus integration for GPU shader windows, including one-click `acuneus/stableaudio`, `acuneus/candlevideo`, `acuneus/synth`, and `audio/video demo` welcome patches
+* optional Awisp integration for embedded Bevy/Wisp WGSL shader windows, reflected sliders/checkboxes/dropdowns, image-input fallbacks, editor launching, audio-driven param automation, and localhost OSC/UDP control
 * StableAudio node for local audio generation, looping, auto-generation, metadata browsing, Ollama music prompts, and Acuneus music automation
 * CandleVideo node for local LTX video generation, Ollama video prompts, CRC32-based output filenames, autoload/autonext playback, and Acuneus media loading
 * Works on Windows, Mac, and Linux
@@ -54,6 +55,7 @@ The fork identifies itself as `BespokeSynth_gen` at the CMake project and JUCE p
 The main local integrations are:
 
 * `libs/rust/acuneus` for the Acuneus runtime and C ABI
+* `libs/rust/awisp` for the Awisp embedded Bevy/Wisp runtime, C ABI, and editor
 * `libs/rust/candle-video` for the Candle LTX video generator
 * `libs/rust/stableaudio-rs` for the StableAudio C API
 * local StableAudio and CandleVideo model directories under top-level `models/`
@@ -65,9 +67,19 @@ Initialize the Rust integrations with:
 task setup
 ```
 
-`task setup` initializes the normal Bespoke submodules and clones or updates the Rust integrations from the refs listed in `Taskfile.yml` (currently `main`). CMake uses those local checkouts when present; if one is missing, configure prints a `task setup` reminder instead of cloning during configure.
+`task setup` initializes the normal Bespoke submodules and clones or updates the Rust integrations from the refs listed in `Taskfile.yml` (currently `main`), including Acuneus, Awisp, StableAudio, and CandleVideo. CMake uses those local checkouts when present; if one is missing, configure prints a `task setup` reminder instead of cloning during configure.
 
 The Acuneus runner is `acuneus_runner` / `acuneus_runner.exe`, while the C API dynamic library uses the explicit `_capi` name on every platform: `acuneus_capi.dll` on Windows, `libacuneus_capi.dylib` on macOS, and `libacuneus_capi.so` on Linux.
+
+The Awisp runtime is always embedded through its C ABI. CMake builds
+`libs/rust/awisp/crates/awisp-capi` and copies the dynamic library next to the
+forked executable; it also builds and copies `wisp-editor` so the Awisp module's
+`edit` checkbox can launch the Wisp editor from inside Bespoke. The Awisp module
+also exposes a `port` control, defaulting to `7941`, for localhost OSC/UDP input
+under the `/awisp/wisp/*` namespace, including `/awisp/wisp/discover` and
+`/awisp/wisp/subscribe` feedback for reflected params and value echoes. See
+`libs/rust/awisp/README.md` for the supported shader, window, image, param,
+checkbox, audio, discovery, and feedback messages.
 
 ### Acuneus / StableAudio Visualizer
 
@@ -183,9 +195,19 @@ BespokeSynth has a [Go Task](https://taskfile.dev) Taskfile.yml as a cross-platf
 
 ```sh
 task           # Configure and build BespokeSynth (default)
-task run       # Run the built BespokeSynth executable
+task run       # Build, then run the BespokeSynth executable
+task r         # Run the already-built BespokeSynth executable
 task clean     # Remove build artifacts
 task install   # Install build prerequisites for your platform
+```
+
+When passing media URLs to `mpvplayer`, quote URLs that contain shell
+characters such as `&`. On Windows, use `task r` for a direct launch into an
+already-built executable, and add `--single` to send another mpvplayer to an
+already-running Bespoke instance:
+
+```cmd
+task r -- --single --mpv "https://www.youtube.com/watch?v=q09EYB84th4&t=1444s"
 ```
 
 Task will automatically detect your platform (Windows, macOS, Linux, or WSL) and use the appropriate build directory and commands.

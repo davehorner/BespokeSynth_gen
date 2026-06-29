@@ -359,12 +359,12 @@ void Awisp::OpenInstance()
    }
    if (mInstance != nullptr)
    {
-      awisp_instance_set_visible(mInstance, true);
-      ApplyWindowGeometry();
-      ApplyTitleBarVisible();
-      ApplyRemotePort();
       if (awisp_instance_load_shader(mInstance, shaderName.c_str()))
       {
+         awisp_instance_set_visible(mInstance, true);
+         ApplyWindowGeometry();
+         ApplyTitleBarVisible();
+         ApplyRemotePort();
          RefreshParamControls();
          SetStatus("loaded " + shaderName);
       }

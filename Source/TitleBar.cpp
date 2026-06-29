@@ -204,6 +204,7 @@ SpawnListManager::SpawnListManager(IDropdownListener* owner)
 , mAudioModules(owner, 0, 0, "audio effects:", kModuleCategory_Audio, true)
 , mModulatorModules(owner, 0, 0, "modulators:", kModuleCategory_Modulator, true)
 , mPulseModules(owner, 0, 0, "pulse:", kModuleCategory_Pulse, true)
+, mVideoModules(owner, 0, 0, "video effects:", kModuleCategory_Video, true)
 , mPlugins(owner, 0, 0, kPluginsDropdownLabel, kModuleCategory_Synth, true)
 , mOtherModules(owner, 0, 0, "other:", kModuleCategory_Other, true)
 , mPrefabs(owner, 0, 0, "prefabs:", kModuleCategory_Other, false)
@@ -218,6 +219,7 @@ void SpawnListManager::SetModuleFactory(ModuleFactory* factory)
    mAudioModules.SetList(factory->GetSpawnableModules(kModuleCategory_Audio));
    mModulatorModules.SetList(factory->GetSpawnableModules(kModuleCategory_Modulator));
    mPulseModules.SetList(factory->GetSpawnableModules(kModuleCategory_Pulse));
+   mVideoModules.SetList(factory->GetSpawnableModules(kModuleCategory_Video));
    mOtherModules.SetList(factory->GetSpawnableModules(kModuleCategory_Other));
 
    SetUpPluginsDropdown();
@@ -229,6 +231,7 @@ void SpawnListManager::SetModuleFactory(ModuleFactory* factory)
    mDropdowns.push_back(&mAudioModules);
    mDropdowns.push_back(&mModulatorModules);
    mDropdowns.push_back(&mPulseModules);
+   mDropdowns.push_back(&mVideoModules);
    mDropdowns.push_back(&mPlugins);
    mDropdowns.push_back(&mOtherModules);
    mDropdowns.push_back(&mPrefabs);

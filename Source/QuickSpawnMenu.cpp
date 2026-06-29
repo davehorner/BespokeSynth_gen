@@ -360,6 +360,8 @@ bool QuickSpawnMenu::MatchesFilter(const ModuleFactory::Spawnable& spawnable) co
             outputMatches = true;
          if (info.mCategory == kModuleCategory_Processor)
             outputMatches = true;
+         if (info.mCategory == kModuleCategory_Video)
+            outputMatches = true;
       }
 
       if (mMainContainerFollower->mTempConnectionCable->GetConnectionType() == kConnectionType_Pulse)

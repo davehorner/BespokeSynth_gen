@@ -28,6 +28,7 @@
 #include "ScriptModule.h"
 #include "ModularSynth.h"
 #include "IDrawableModule.h"
+#include "TextEntry.h"
 #include "NoteStepSequencer.h"
 #include "StepSequencer.h"
 #include "NoteCanvas.h"
@@ -45,6 +46,9 @@
 #include "ControlInterface.h"
 #include "Beats.h"
 #include "AbletonDeviceShared.h"
+#include "ModuleFactory.h"
+#include "MpvPlayer.h"
+#include "BespokeReserveSpace.h"
 
 #if BESPOKE_ACUNEUS_ENABLED
 extern "C" {
@@ -75,6 +79,14 @@ PYBIND11_EMBEDDED_MODULE(bespoke, m) {
    m.def("reset_transport", []()
    {
       TheTransport->Reset();
+   });
+   m.def("is_audio_paused", []()
+   {
+      return TheSynth->IsAudioPaused();
+   });
+   m.def("is_transport_playing", []()
+   {
+      return !TheSynth->IsAudioPaused();
    });
    m.def("get_step", [](int subdivision)
    {
@@ -1038,6 +1050,14 @@ PYBIND11_EMBEDDED_MODULE(module, m)
             control->SetValue(value, ScriptModule::sMostRecentRunTime);
          }
       })
+      .def("set_text", [](IDrawableModule& module, std::string path, std::string value)
+      {
+         ScriptModule::sMostRecentLineExecutedModule->SetContext();
+         IUIControl* control = module.FindUIControl(path.c_str(), false);
+         ScriptModule::sMostRecentLineExecutedModule->ClearContext();
+         if (auto* textEntry = dynamic_cast<TextEntry*>(control))
+            textEntry->SetText(value);
+      })
       .def("get", [](IDrawableModule& module, std::string path)
       {
          ScriptModule::sMostRecentLineExecutedModule->SetContext();
@@ -1081,5 +1101,98 @@ PYBIND11_EMBEDDED_MODULE(module, m)
       });
       ///description: zoom = 0: zoom module to full screen, zoom = 0.1 - 8: zoom to specified zoomlevel
       ///example: ns = me.get("notesequencer"); ns.set_focus(2)
+}
+
+PYBIND11_EMBEDDED_MODULE(mpvplayer, m)
+{
+   m.def("get", [](std::string path)
+   {
+      ScriptModule::sMostRecentLineExecutedModule->SetContext();
+      auto* ret = dynamic_cast<MpvPlayer*>(TheSynth->FindModule(path, false));
+      if (ret != nullptr)
+         ScriptModule::sMostRecentLineExecutedModule->OnModuleReferenceBound(ret);
+      ScriptModule::sMostRecentLineExecutedModule->ClearContext();
+      return ret;
+   }, py::return_value_policy::reference);
+   m.def("create", [](std::string name, float x, float y)
+   {
+      ModuleFactory::Spawnable spawnable;
+      spawnable.mLabel = "mpvplayer";
+      auto* ret = dynamic_cast<MpvPlayer*>(TheSynth->SpawnModuleOnTheFly(spawnable, x, y, true, name));
+      if (ret != nullptr)
+         ret->SetName(name.c_str());
+      return ret;
+   }, py::return_value_policy::reference);
+   m.def("get_all", []()
+   {
+      std::vector<IDrawableModule*> modules;
+      TheSynth->GetAllModules(modules);
+      std::vector<MpvPlayer*> players;
+      for (auto* module : modules)
+      {
+         if (auto* player = dynamic_cast<MpvPlayer*>(module))
+            players.push_back(player);
+      }
+      return players;
+   }, py::return_value_policy::reference);
+
+   py::class_<MpvPlayer, IDrawableModule>(m, "mpvplayer")
+      .def("open_media", &MpvPlayer::OpenMedia, "mediaPath"_a, "play"_a = true)
+      .def("unload_media", &MpvPlayer::UnloadMedia)
+      .def("set_play", &MpvPlayer::SetPlayback)
+      .def("set_mute", &MpvPlayer::SetMute)
+      .def("set_volume", &MpvPlayer::SetVolume)
+      .def("set_time", &MpvPlayer::SetTimeSeconds)
+      .def("set_geometry", &MpvPlayer::SetWindowGeometry)
+      .def("set_preset", &MpvPlayer::SetWindowPreset)
+      .def("get_time", &MpvPlayer::GetTimeSeconds)
+      .def("get_duration", &MpvPlayer::GetDurationSeconds)
+      .def("get_window_x", &MpvPlayer::GetWindowX)
+      .def("get_window_y", &MpvPlayer::GetWindowY)
+      .def("get_window_w", &MpvPlayer::GetWindowWidth)
+      .def("get_window_h", &MpvPlayer::GetWindowHeight);
+}
+
+PYBIND11_EMBEDDED_MODULE(bespoke_reserve_space, m)
+{
+   m.def("get", [](std::string path)
+   {
+      ScriptModule::sMostRecentLineExecutedModule->SetContext();
+      auto* ret = dynamic_cast<BespokeReserveSpace*>(TheSynth->FindModule(path, false));
+      if (ret != nullptr)
+         ScriptModule::sMostRecentLineExecutedModule->OnModuleReferenceBound(ret);
+      ScriptModule::sMostRecentLineExecutedModule->ClearContext();
+      return ret;
+   }, py::return_value_policy::reference);
+
+   m.def("create", [](std::string name, float x, float y)
+   {
+      ModuleFactory::Spawnable spawnable;
+      spawnable.mLabel = "bespoke_reserve_space";
+      auto* ret = dynamic_cast<BespokeReserveSpace*>(TheSynth->SpawnModuleOnTheFly(spawnable, x, y, true, name));
+      if (ret != nullptr)
+         ret->SetName(name.c_str());
+      return ret;
+   }, py::return_value_policy::reference);
+
+   m.def("get_or_create", [](std::string name, float x, float y)
+   {
+      auto* ret = dynamic_cast<BespokeReserveSpace*>(TheSynth->FindModule(name, false));
+      if (ret != nullptr)
+         return ret;
+
+      ModuleFactory::Spawnable spawnable;
+      spawnable.mLabel = "bespoke_reserve_space";
+      ret = dynamic_cast<BespokeReserveSpace*>(TheSynth->SpawnModuleOnTheFly(spawnable, x, y, true, name));
+      if (ret != nullptr)
+         ret->SetName(name.c_str());
+      return ret;
+   }, py::return_value_policy::reference);
+
+   py::class_<BespokeReserveSpace, IDrawableModule>(m, "bespoke_reserve_space")
+      .def("get_video_x", &BespokeReserveSpace::GetVideoX)
+      .def("get_video_y", &BespokeReserveSpace::GetVideoY)
+      .def("get_video_w", &BespokeReserveSpace::GetVideoW)
+      .def("get_video_h", &BespokeReserveSpace::GetVideoH);
 }
 

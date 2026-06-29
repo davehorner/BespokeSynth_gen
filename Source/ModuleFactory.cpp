@@ -284,8 +284,10 @@
 #include "SessionOrganizer.h"
 #include "AudioSyncer.h"
 #include "StableAudio.h"
+#include "BespokeReserveSpace.h"
 #include "CandleVideo.h"
 #include "MpvPlayer.h"
+#include "MpvPlayerAutomation.h"
 #include "Acuneus.h"
 #include "AcuneusAutomation.h"
 #include "Awisp.h"
@@ -527,11 +529,13 @@ ModuleFactory::ModuleFactory()
    REGISTER(SessionOrganizer, sessionorganizer, kModuleCategory_Other);
    REGISTER(AudioSyncer, audiosyncer, kModuleCategory_Audio);
    REGISTER(StableAudio, stableaudio, kModuleCategory_Synth);
-   REGISTER(CandleVideo, candlevideo, kModuleCategory_Other);
-   REGISTER(MpvPlayer, mpvplayer, kModuleCategory_Other);
-   REGISTER(Acuneus, acuneus, kModuleCategory_Other);
-   REGISTER(AcuneusAutomation, acuneus_automation, kModuleCategory_Other);
-   REGISTER(Awisp, awisp, kModuleCategory_Other);
+   REGISTER(BespokeReserveSpace, bespoke_reserve_space, kModuleCategory_Other);
+   REGISTER(CandleVideo, candlevideo, kModuleCategory_Video);
+   REGISTER(MpvPlayer, mpvplayer, kModuleCategory_Video);
+   REGISTER(MpvPlayerAutomation, mpv_player_automation, kModuleCategory_Video);
+   REGISTER(Acuneus, acuneus, kModuleCategory_Video);
+   REGISTER(AcuneusAutomation, acuneus_automation, kModuleCategory_Video);
+   REGISTER(Awisp, awisp, kModuleCategory_Video);
    REGISTER(DefaultOutputLoopback, defaultoutput, kModuleCategory_Audio);
 
    //REGISTER_EXPERIMENTAL(MidiPlayer, midiplayer, kModuleCategory_Instrument);

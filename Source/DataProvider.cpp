@@ -110,6 +110,7 @@ void DataProvider::CreateUIControls()
    mTypeSelectorDropdown->AddLabel("Bespoke: Processor modules", interval++);
    mTypeSelectorDropdown->AddLabel("Bespoke: Modulator modules", interval++);
    mTypeSelectorDropdown->AddLabel("Bespoke: Pulse modules", interval++);
+   mTypeSelectorDropdown->AddLabel("Bespoke: Video modules", interval++);
    mTypeSelectorDropdown->AddLabel("Bespoke: Other modules", interval++);
    mTypeSelectorDropdown->AddLabel("Bespoke: Unknown modules", interval++);
    mTypeSelectorDropdown->AddLabel("Bespoke: Cable sources", interval++);
@@ -420,25 +421,32 @@ void DataProvider::Go(double time)
       case 49:
          TheSynth->GetRootContainer()->GetAllModules(modules);
          for (const auto mod : modules)
-            if (mod != nullptr && mod->GetModuleCategory() == kModuleCategory_Other)
+            if (mod != nullptr && mod->GetModuleCategory() == kModuleCategory_Video)
                counter++;
          mValue = counter;
          break;
       case 50:
          TheSynth->GetRootContainer()->GetAllModules(modules);
          for (const auto mod : modules)
-            if (mod != nullptr && mod->GetModuleCategory() == kModuleCategory_Unknown)
+            if (mod != nullptr && mod->GetModuleCategory() == kModuleCategory_Other)
                counter++;
          mValue = counter;
          break;
       case 51:
          TheSynth->GetRootContainer()->GetAllModules(modules);
          for (const auto mod : modules)
+            if (mod != nullptr && mod->GetModuleCategory() == kModuleCategory_Unknown)
+               counter++;
+         mValue = counter;
+         break;
+      case 52:
+         TheSynth->GetRootContainer()->GetAllModules(modules);
+         for (const auto mod : modules)
             if (mod != nullptr)
                counter += mod->GetPatchCableSources().size();
          mValue = counter;
          break;
-      case 52:
+      case 53:
          TheSynth->GetRootContainer()->GetAllModules(modules);
          for (const auto mod : modules)
             if (mod != nullptr)
@@ -446,16 +454,16 @@ void DataProvider::Go(double time)
                   counter += sources->GetPatchCables().size();
          mValue = counter;
          break;
-      case 53:
+      case 54:
          mValue = !TheSynth->IsLoadingState();
          break;
-      case 54:
+      case 55:
          mValue = ofToDouble(ofSplitString(Bespoke::VERSION, ".")[0]);
          break;
-      case 55:
+      case 56:
          mValue = ofToDouble(ofSplitString(Bespoke::VERSION, ".")[1]);
          break;
-      case 56:
+      case 57:
          mValue = ofToDouble(ofSplitString(Bespoke::VERSION, ".")[2]);
          break;
    }

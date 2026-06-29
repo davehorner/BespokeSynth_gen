@@ -39,6 +39,7 @@
 class Acuneus;
 class Awisp;
 class IAudioReceiver;
+class MpvPlayer;
 
 class CandleVideo : public IAudioSource, public IDrawableModule, public IFloatSliderListener, public IIntSliderListener, public IDropdownListener, public IButtonListener, public ITextEntryListener
 {
@@ -111,8 +112,10 @@ private:
    void LoadVideoIntoTarget(const std::string& path);
    std::vector<Acuneus*> GetTargetAcuneusModules();
    std::vector<Awisp*> GetTargetAwispModules();
+   std::vector<MpvPlayer*> GetTargetMpvModules();
    void CollectTargetAcuneusModules(IAudioReceiver* receiver, std::vector<Acuneus*>& acuneusModules, std::set<IAudioReceiver*>& visited);
    void CollectTargetAwispModules(IAudioReceiver* receiver, std::vector<Awisp*>& awispModules, std::set<IAudioReceiver*>& visited);
+   void CollectTargetMpvModules(IAudioReceiver* receiver, std::vector<MpvPlayer*>& mpvModules, std::set<IAudioReceiver*>& visited);
    std::string BuildAwispImageInputPath(const std::string& videoPath);
    std::vector<std::string> BuildAwispImageInputFrames(const std::string& videoPath, int frameCount);
    void UnloadTargetMediaIfNeeded(const std::vector<std::string>& deletingPaths);

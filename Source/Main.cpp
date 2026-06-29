@@ -29,6 +29,14 @@ void SetStartupSaveStateFile(const String& bskPath, Component* mainComponent);
 
 namespace
 {
+String StripMatchingQuotes(String value)
+{
+   value = value.trim();
+   if (value.length() >= 2 && ((value.startsWithChar('"') && value.endsWithChar('"')) || (value.startsWithChar('\'') && value.endsWithChar('\''))))
+      return value.substring(1, value.length() - 1);
+   return value;
+}
+
 bool HasSingleFlag(const StringArray& args)
 {
    for (const auto& arg : args)
@@ -47,18 +55,73 @@ String ExtractMpvMedia(const StringArray& args)
       if (arg == "--mpv" || arg == "--mpv-url")
       {
          if (i + 1 < args.size())
-            return args[i + 1];
+            return StripMatchingQuotes(args[i + 1]);
       }
       else if (arg.startsWith("--mpv="))
       {
-         return arg.fromFirstOccurrenceOf("=", false, false);
+         return StripMatchingQuotes(arg.fromFirstOccurrenceOf("=", false, false));
       }
       else if (arg.startsWith("--mpv-url="))
       {
-         return arg.fromFirstOccurrenceOf("=", false, false);
+         return StripMatchingQuotes(arg.fromFirstOccurrenceOf("=", false, false));
       }
    }
    return {};
+}
+
+String ExtractMpvAutomationMedia(const StringArray& args)
+{
+   for (int i = 0; i < args.size(); ++i)
+   {
+      const String arg = args[i];
+      if (arg == "--mpv-auto" || arg == "--mpv-automation")
+      {
+         if (i + 1 < args.size())
+            return StripMatchingQuotes(args[i + 1]);
+      }
+      else if (arg.startsWith("--mpv-auto="))
+      {
+         return StripMatchingQuotes(arg.fromFirstOccurrenceOf("=", false, false));
+      }
+      else if (arg.startsWith("--mpv-automation="))
+      {
+         return StripMatchingQuotes(arg.fromFirstOccurrenceOf("=", false, false));
+      }
+   }
+   return {};
+}
+
+String ExtractFlagValueFromRawCommandLine(const String& commandLine, const String& flag)
+{
+   const String equalsPrefix = flag + "=";
+   const int equalsIndex = commandLine.indexOf(equalsPrefix);
+   if (equalsIndex >= 0)
+   {
+      String value = commandLine.substring(equalsIndex + equalsPrefix.length()).trim();
+      return StripMatchingQuotes(value);
+   }
+
+   const int flagIndex = commandLine.indexOf(flag);
+   if (flagIndex < 0)
+      return {};
+
+   String rest = commandLine.substring(flagIndex + flag.length()).trimStart();
+   if (rest.isEmpty())
+      return {};
+
+   if (rest.startsWithChar('"') || rest.startsWithChar('\''))
+   {
+      const juce_wchar quote = rest[0];
+      const int endQuote = rest.indexOfChar(1, quote);
+      if (endQuote > 0)
+         return rest.substring(1, endQuote);
+      return rest.substring(1);
+   }
+
+   const int space = rest.indexOfChar(' ');
+   if (space >= 0)
+      return rest.substring(0, space);
+   return rest;
 }
 }
 
@@ -100,7 +163,8 @@ public:
                       << "Options:\n"
                       << "  -o, --option <option> <value>   Temporarily override settings in preferences file\n"
                       << "  --mpv <url-or-path>             Open media in an mpvplayer module\n"
-                      << "  --single                        With --mpv, add the media to the existing Bespoke instance\n"
+                      << "  --mpv-auto <url-or-path>        Open mpv_player_automation with this media URL\n"
+                      << "  --single                        With --mpv or --mpv-auto, add to the existing Bespoke instance\n"
                       << "  -h, --help                      Print help\n"
                       << "  -v, --version                   Print version\n"
                       << std::flush;
@@ -134,6 +198,11 @@ public:
          storedScannerSubprocess = std::move(scannerSubprocess);
          return;
       }
+
+      const String initialMpvAutomationMedia = ExtractMpvAutomationMedia(cliArgv);
+      const String initialRawMpvAutomationMedia = initialMpvAutomationMedia.isNotEmpty() ? initialMpvAutomationMedia : ExtractFlagValueFromRawCommandLine(commandLine, "--mpv-auto");
+      if (initialRawMpvAutomationMedia.isNotEmpty())
+         QueueStartupMpvAutomationMedia(initialRawMpvAutomationMedia.toStdString());
 
       mainWindow = std::make_unique<MainWindow>("bespoke synth");
 
@@ -188,6 +257,10 @@ public:
          SetStartupSaveStateFile(commandLine, mainWindow->getContentComponent());
 
       const StringArray args = StringArray::fromTokens(commandLine, true);
+      const String mpvAutomationMedia = ExtractMpvAutomationMedia(args);
+      const String rawMpvAutomationMedia = mpvAutomationMedia.isNotEmpty() ? mpvAutomationMedia : ExtractFlagValueFromRawCommandLine(commandLine, "--mpv-auto");
+      if (rawMpvAutomationMedia.isNotEmpty() && TheSynth != nullptr)
+         TheSynth->QueueMpvAutomationMedia(rawMpvAutomationMedia.toStdString());
       const String mpvMedia = ExtractMpvMedia(args);
       if (mpvMedia.isNotEmpty() && TheSynth != nullptr)
          TheSynth->QueueMpvMedia(mpvMedia.toStdString());

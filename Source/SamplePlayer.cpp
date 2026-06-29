@@ -477,9 +477,8 @@ void SamplePlayer::AutoSlice(int slices)
 
 void SamplePlayer::FilesDropped(std::vector<std::string> files, int x, int y)
 {
-   Sample* sample = new Sample();
-   sample->Read(files[0].c_str());
-   UpdateSample(sample, true);
+   if (!files.empty())
+      LoadSampleFile(files[0], false);
 }
 
 void SamplePlayer::SampleDropped(int x, int y, Sample* sample)
@@ -517,6 +516,33 @@ void SamplePlayer::UpdateSample(Sample* sample, bool ownsSample)
       delete oldSamplePtr;
 
    mIsLoadingSample = true;
+}
+
+bool SamplePlayer::LoadSampleFile(const std::string& path, bool play)
+{
+   if (path.empty())
+      return false;
+
+   juce::File file(path);
+   if (!file.existsAsFile())
+      return false;
+
+   Sample* sample = new Sample();
+   sample->Read(path.c_str());
+   UpdateSample(sample, true);
+
+   if (play)
+   {
+      mCuePointSpeed = 1;
+      mStopOnNoteOff = false;
+      if (mSpeed < 0 && mSample != nullptr)
+         mSample->SetPlayPosition(mSample->LengthInSamples() - 1);
+      mPlay = true;
+      mAdsr.Clear();
+      mAdsr.Start(gTime * gInvSampleRateMs, 1);
+   }
+
+   return true;
 }
 
 void SamplePlayer::ButtonClicked(ClickButton* button, double time)

@@ -454,6 +454,9 @@ namespace AbletonDevice
          case kModuleCategory_Pulse:
             color = enabled ? 9 : 82;
             break;
+         case kModuleCategory_Video:
+            color = enabled ? 43 : 102;
+            break;
          default:
             color = enabled ? 118 : 119;
             break;

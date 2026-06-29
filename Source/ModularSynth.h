@@ -158,7 +158,7 @@ public:
    bool LoadLayoutFromString(std::string jsonString);
    void LoadLayout(ofxJSONElement json);
    std::string GetLoadedLayout() const { return mLoadedLayoutPath; }
-   void ReloadInitialLayout() { mWantReloadInitialLayout = true; }
+   void ReloadInitialLayout();
    void LoadAcuneusPatch() { mWantLoadAcuneusPatch = true; }
    void LoadAcuneusStableAudioPatch() { mWantLoadAcuneusStableAudioPatch = true; }
    void LoadAcuneusCandleVideoPatch() { mWantLoadAcuneusCandleVideoPatch = true; }
@@ -172,7 +172,13 @@ public:
    void LoadAwispStableAudioPatch() { mWantLoadAwispStableAudioPatch = true; }
    void LoadAwispCandleVideoPatch() { mWantLoadAwispCandleVideoPatch = true; }
    void LoadAwispYoutubePatch() { mWantLoadAwispYoutubePatch = true; }
+   void LoadMpvPatch() { mWantLoadMpvPatch = true; }
+   void LoadMpvAutomationPatch() { mWantLoadMpvAutomationPatch = true; }
+   void LoadMpvStableAudioPatch() { mWantLoadMpvStableAudioPatch = true; }
+   void LoadMpvCandleVideoPatch() { mWantLoadMpvCandleVideoPatch = true; }
+   void LoadMpvVideoSwarmPatch() { mWantLoadMpvVideoSwarmPatch = true; }
    void QueueMpvMedia(std::string media);
+   void QueueMpvAutomationMedia(std::string media);
    bool HasFatalError() { return mFatalError != ""; }
 
    void AddLissajousDrawer(IDrawableModule* module) { mLissajousDrawers.push_back(module); }
@@ -454,8 +460,19 @@ private:
    bool mWantLoadAwispStableAudioPatch{ false };
    bool mWantLoadAwispCandleVideoPatch{ false };
    bool mWantLoadAwispYoutubePatch{ false };
+   bool mWantLoadMpvPatch{ false };
+   bool mWantLoadMpvAutomationPatch{ false };
+   bool mWantLoadMpvStableAudioPatch{ false };
+   bool mWantLoadMpvCandleVideoPatch{ false };
+   bool mWantLoadMpvVideoSwarmPatch{ false };
    bool mWantLoadMpvStartupPatch{ false };
    std::vector<std::string> mQueuedMpvMedia;
+   std::vector<std::string> mQueuedMpvAutomationMedia;
+   std::string mDelayedStartupMpvAutomationMedia;
+   int mDelayedStartupMpvAutomationFrames{ -1 };
+   std::string mPendingStartupMpvAutomationMedia;
+   int mPendingStartupMpvAutomationFrames{ 0 };
+   int mMpvAutomationStartupProtectionFrames{ 0 };
    std::string mCurrentSaveStatePath;
    std::string mStartupSaveStateFile;
 
@@ -470,6 +487,7 @@ private:
    ModuleContainer* mGroupSelectContext{ nullptr };
    bool mHasDuplicatedDuringDrag{ false };
    bool mHasAutopatchedToTargetDuringDrag{ false };
+   bool mConsumedStartupMpvAutomationCommandLine{ false };
 
    IDrawableModule* mResizeModule{ nullptr };
 
@@ -522,3 +540,4 @@ private:
 };
 
 extern ModularSynth* TheSynth;
+void QueueStartupMpvAutomationMedia(std::string media);

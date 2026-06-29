@@ -57,6 +57,7 @@ enum ModuleCategory
    kModuleCategory_Processor,
    kModuleCategory_Modulator,
    kModuleCategory_Pulse,
+   kModuleCategory_Video,
    kModuleCategory_Other,
    kModuleCategory_Unknown
 };

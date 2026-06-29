@@ -101,9 +101,15 @@ void WelcomeScreen::CreateUIControls()
    mAwispCandleVideoPatchButton = new ClickButton(this, "candlevideo", 421, 77);
    mAwispYoutubePatchButton = new ClickButton(this, "audio/video demo", 520, 77);
 
-   mDocsLinkButton = new ClickButton(this, "bespokesynth.com/docs", 111, 104);
-   mDiscordLinkButton = new ClickButton(this, "bespoke discord", 324, 104);
-   mTutorialVideoLinkButton = new ClickButton(this, "youtu.be/SYBc8X2IxqM", 176, 123);
+   mMpvPatchButton = new ClickButton(this, "mpv", 80, 101);
+   mMpvAutomationPatchButton = new ClickButton(this, "automation", 142, 101);
+   mMpvStableAudioPatchButton = new ClickButton(this, "stableaudio", 235, 101);
+   mMpvCandleVideoPatchButton = new ClickButton(this, "candlevideo", 330, 101);
+   mMpvVideoSwarmPatchButton = new ClickButton(this, "video swarm", 429, 101);
+
+   mDocsLinkButton = new ClickButton(this, "bespokesynth.com/docs", 111, 132);
+   mDiscordLinkButton = new ClickButton(this, "bespoke discord", 324, 132);
+   mTutorialVideoLinkButton = new ClickButton(this, "youtu.be/SYBc8X2IxqM", 176, 151);
 
    mWidth = ofGetWidth() / TheSynth->GetUIScale() - 100;
    mHeight = ofGetHeight() / TheSynth->GetUIScale() - 200;
@@ -239,14 +245,20 @@ void WelcomeScreen::DrawModule()
    mAwispStableAudioPatchButton->Draw();
    mAwispCandleVideoPatchButton->Draw();
    mAwispYoutubePatchButton->Draw();
+   mMpvPatchButton->Draw();
+   mMpvAutomationPatchButton->Draw();
+   mMpvStableAudioPatchButton->Draw();
+   mMpvCandleVideoPatchButton->Draw();
+   mMpvVideoSwarmPatchButton->Draw();
 
    DrawTextNormal("acuneus:", 20, 65);
    DrawTextNormal("awisp:", 20, 89);
-   DrawTextNormal("documentation:", 20, 116);
+   DrawTextNormal("mpv:", 20, 113);
+   DrawTextNormal("documentation:", 20, 144);
    mDocsLinkButton->Draw();
-   DrawTextNormal("join the ", 280, 116);
+   DrawTextNormal("join the ", 280, 144);
    mDiscordLinkButton->Draw();
-   DrawTextNormal("video overview available at:", 20, 135);
+   DrawTextNormal("video overview available at:", 20, 163);
    mTutorialVideoLinkButton->Draw();
 
    DrawTextBold("recent files:", kSaveStateButtonStartX, kSaveStateButtonStartY);
@@ -352,6 +364,16 @@ void WelcomeScreen::ButtonClicked(ClickButton* button, double time)
       TheSynth->LoadAwispCandleVideoPatch();
    if (button == mAwispYoutubePatchButton)
       TheSynth->LoadAwispYoutubePatch();
+   if (button == mMpvPatchButton)
+      TheSynth->LoadMpvPatch();
+   if (button == mMpvAutomationPatchButton)
+      TheSynth->LoadMpvAutomationPatch();
+   if (button == mMpvStableAudioPatchButton)
+      TheSynth->LoadMpvStableAudioPatch();
+   if (button == mMpvCandleVideoPatchButton)
+      TheSynth->LoadMpvCandleVideoPatch();
+   if (button == mMpvVideoSwarmPatchButton)
+      TheSynth->LoadMpvVideoSwarmPatch();
    if (button == mLoadPatchButton)
       TheSynth->LoadStatePopup();
    if (button == mShowHelpButton)

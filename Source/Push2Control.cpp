@@ -965,6 +965,8 @@ ModuleCategory Push2Control::GetModuleTypeForSpawnList(IUIControl* control)
       moduleType = kModuleCategory_Modulator;
    if (control == mSpawnLists.mPulseModules.GetList())
       moduleType = kModuleCategory_Pulse;
+   if (control == mSpawnLists.mVideoModules.GetList())
+      moduleType = kModuleCategory_Video;
    if (control == mSpawnLists.mOtherModules.GetList())
       moduleType = kModuleCategory_Other;
    if (control == mSpawnLists.mPlugins.GetList())

@@ -82,6 +82,7 @@ struct SpawnListManager
    SpawnList mAudioModules;
    SpawnList mModulatorModules;
    SpawnList mPulseModules;
+   SpawnList mVideoModules;
    SpawnList mOtherModules;
    SpawnList mPlugins;
    SpawnList mPrefabs;

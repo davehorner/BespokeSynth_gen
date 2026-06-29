@@ -15,6 +15,7 @@
 #include "FileStream.h"
 #include "IAudioReceiver.h"
 #include "ModularSynth.h"
+#include "MpvPlayer.h"
 #include "OllamaPromptGenerator.h"
 #include "Profiler.h"
 #include "SynthGlobals.h"
@@ -1281,9 +1282,10 @@ void CandleVideo::LoadVideoIntoTarget(const std::string& path)
    const bool targetIsDirectAwisp = dynamic_cast<Awisp*>(GetTarget()) != nullptr;
    const std::vector<Acuneus*> acuneusModules = GetTargetAcuneusModules();
    const std::vector<Awisp*> awispModules = GetTargetAwispModules();
-   if (acuneusModules.empty() && awispModules.empty())
+   const std::vector<MpvPlayer*> mpvModules = GetTargetMpvModules();
+   if (acuneusModules.empty() && awispModules.empty() && mpvModules.empty())
    {
-      AppendStatusText("\nconnect to an acuneus or awisp module, or to an audio splitter that targets visual modules");
+      AppendStatusText("\nconnect to an acuneus, awisp, or mpvplayer module, or to an audio splitter that targets visual modules");
       return;
    }
 
@@ -1340,6 +1342,16 @@ void CandleVideo::LoadVideoIntoTarget(const std::string& path)
       }
    }
 
+   int mpvLoadedCount = 0;
+   for (auto* mpv : mpvModules)
+   {
+      if (mpv == nullptr)
+         continue;
+      mpv->OpenMedia(path, true);
+      ++mpvLoadedCount;
+      ++loadedCount;
+   }
+
    if (loadedCount == 0)
    {
       AppendStatusText("\nno open visual modules behind splitter");
@@ -1358,10 +1370,12 @@ void CandleVideo::LoadVideoIntoTarget(const std::string& path)
       }
    }
    AppendStatusText("\nloaded " + juce::File(path).getFileName().toStdString());
-   if ((int)acuneusModules.size() + (int)awispModules.size() > 1)
+   if ((int)acuneusModules.size() + (int)awispModules.size() + (int)mpvModules.size() > 1)
       AppendStatusText(" into " + ofToString(loadedCount) + " visual modules");
    if (awispLoadedCount > 0)
       AppendStatusText(" (" + ofToString(awispLoadedCount) + (mAwispPoster ? " awisp poster inputs)" : " awisp frame inputs)"));
+   if (mpvLoadedCount > 0)
+      AppendStatusText(" (" + ofToString(mpvLoadedCount) + " mpv players)");
    if (skippedClosedCount > 0)
       AppendStatusText(" (" + ofToString(skippedClosedCount) + " closed skipped)");
 
@@ -1387,6 +1401,14 @@ std::vector<Awisp*> CandleVideo::GetTargetAwispModules()
    std::set<IAudioReceiver*> visited;
    CollectTargetAwispModules(GetTarget(), awispModules, visited);
    return awispModules;
+}
+
+std::vector<MpvPlayer*> CandleVideo::GetTargetMpvModules()
+{
+   std::vector<MpvPlayer*> mpvModules;
+   std::set<IAudioReceiver*> visited;
+   CollectTargetMpvModules(GetTarget(), mpvModules, visited);
+   return mpvModules;
 }
 
 void CandleVideo::CollectTargetAcuneusModules(IAudioReceiver* receiver, std::vector<Acuneus*>& acuneusModules, std::set<IAudioReceiver*>& visited)
@@ -1426,6 +1448,26 @@ void CandleVideo::CollectTargetAwispModules(IAudioReceiver* receiver, std::vecto
    {
       for (int i = 0; i < splitter->GetNumTargets(); ++i)
          CollectTargetAwispModules(splitter->GetTarget(i), awispModules, visited);
+   }
+}
+
+void CandleVideo::CollectTargetMpvModules(IAudioReceiver* receiver, std::vector<MpvPlayer*>& mpvModules, std::set<IAudioReceiver*>& visited)
+{
+   if (receiver == nullptr || visited.find(receiver) != visited.end())
+      return;
+   visited.insert(receiver);
+
+   if (auto* mpv = dynamic_cast<MpvPlayer*>(receiver))
+   {
+      if (std::find(mpvModules.begin(), mpvModules.end(), mpv) == mpvModules.end())
+         mpvModules.push_back(mpv);
+      return;
+   }
+
+   if (auto* splitter = dynamic_cast<AudioSplitter*>(receiver))
+   {
+      for (int i = 0; i < splitter->GetNumTargets(); ++i)
+         CollectTargetMpvModules(splitter->GetTarget(i), mpvModules, visited);
    }
 }
 
@@ -1564,6 +1606,13 @@ void CandleVideo::UnloadTargetMediaIfNeeded(const std::vector<std::string>& dele
       if (awisp == nullptr)
          continue;
       awisp->UnloadMedia();
+   }
+   const std::vector<MpvPlayer*> mpvModules = GetTargetMpvModules();
+   for (auto* mpv : mpvModules)
+   {
+      if (mpv == nullptr)
+         continue;
+      mpv->UnloadMedia();
    }
 
    mLoadedVideoPath.clear();

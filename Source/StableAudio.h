@@ -40,6 +40,9 @@
 #include <vector>
 
 class Sample;
+class MpvPlayer;
+class SamplePlayer;
+class IAudioReceiver;
 struct StableAudioModel;
 
 class StableAudio : public IAudioProcessor, public IDrawableModule, public INoteReceiver, public IFloatSliderListener, public IIntSliderListener, public IDropdownListener, public IButtonListener, public ITextEntryListener, public IPulseReceiver
@@ -105,6 +108,13 @@ private:
    void StartGeneration();
    GenerationResult GenerateToFile(std::string prompt, std::string ditPath, std::string decoderPath, std::string textEncoderPath, float seconds, int steps, int seed, std::string outputPath);
    void LoadGeneratedSample(const std::string& path);
+   std::vector<MpvPlayer*> GetTargetMpvModules();
+   void CollectTargetMpvModules(IAudioReceiver* receiver, std::vector<MpvPlayer*>& mpvModules, std::vector<IAudioReceiver*>& visited);
+   std::vector<SamplePlayer*> GetTargetSamplePlayerModules();
+   void CollectTargetSamplePlayerModules(IAudioReceiver* receiver, std::vector<SamplePlayer*>& samplePlayers, std::vector<IAudioReceiver*>& visited);
+   void LoadGeneratedSampleIntoMpvTargets(const std::string& path);
+   void LoadGeneratedSampleIntoSamplePlayerTargets(const std::string& path);
+   void UnloadMpvTargets();
    void Trigger(double time, float velocity);
    void FreeModel();
    std::string BuildOutputPath() const;

@@ -105,6 +105,11 @@ private:
    ClickButton* mAwispStableAudioPatchButton{ nullptr };
    ClickButton* mAwispCandleVideoPatchButton{ nullptr };
    ClickButton* mAwispYoutubePatchButton{ nullptr };
+   ClickButton* mMpvPatchButton{ nullptr };
+   ClickButton* mMpvAutomationPatchButton{ nullptr };
+   ClickButton* mMpvStableAudioPatchButton{ nullptr };
+   ClickButton* mMpvCandleVideoPatchButton{ nullptr };
+   ClickButton* mMpvVideoSwarmPatchButton{ nullptr };
    ClickButton* mLoadPatchButton{ nullptr };
    ClickButton* mShowHelpButton{ nullptr };
    ClickButton* mShowSettingsButton{ nullptr };

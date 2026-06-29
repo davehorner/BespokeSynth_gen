@@ -43,6 +43,8 @@
 
 #include "juce_osc/juce_osc.h"
 
+#include <string>
+
 class Sample;
 
 class SamplePlayer : public IAudioProcessor, public IDrawableModule, public INoteReceiver, public IFloatSliderListener, public IIntSliderListener, public IDropdownListener, public IButtonListener, public IRadioButtonListener, public ITextEntryListener, public IPulseReceiver, private juce::OSCReceiver, private juce::OSCReceiver::Listener<juce::OSCReceiver::RealtimeCallback>
@@ -82,6 +84,7 @@ public:
    void FillData(std::vector<float> data);
    ChannelBuffer* GetCueSampleData(int cueIndex);
    float GetLengthInSeconds() const;
+   bool LoadSampleFile(const std::string& path, bool play);
 
    void oscMessageReceived(const juce::OSCMessage& msg) override;
    void oscBundleReceived(const juce::OSCBundle& bundle) override;

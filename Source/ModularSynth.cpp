@@ -28,6 +28,7 @@
 #include "CandleVideo.h"
 #include "StableAudio.h"
 #include "MpvPlayer.h"
+#include "MpvPlayerAutomation.h"
 #include "QuickSpawnMenu.h"
 #include "AudioToCV.h"
 #include "ScriptModule.h"
@@ -59,6 +60,7 @@ using namespace juce::gl;
 #if BESPOKE_WINDOWS
 #include <windows.h>
 #include <dbghelp.h>
+#include <shellapi.h>
 #include <winbase.h>
 #endif
 
@@ -66,10 +68,157 @@ ModularSynth* TheSynth = nullptr;
 namespace
 {
    juce::String TheClipboard;
+   constexpr const char* kDefaultMpvAutomationUrl = "https://www.youtube.com/watch?v=SYBc8X2IxqM";
    constexpr float kMpvSpawnStartX = 40.0f;
    constexpr float kMpvSpawnStartY = 120.0f;
    constexpr float kMpvSpawnOffsetX = 35.0f;
    constexpr float kMpvSpawnOffsetY = 30.0f;
+   std::vector<std::string> sStartupMpvAutomationMedia;
+
+   juce::String StripMatchingQuotes(juce::String value)
+   {
+      value = value.trim();
+      if (value.length() >= 2 && ((value.startsWithChar('"') && value.endsWithChar('"')) || (value.startsWithChar('\'') && value.endsWithChar('\''))))
+         return value.substring(1, value.length() - 1);
+      return value;
+   }
+
+   juce::String ExtractCommandLineFlagValue(const juce::String& commandLine, const juce::String& flag)
+   {
+      const juce::String equalsPrefix = flag + "=";
+      const int equalsIndex = commandLine.indexOf(equalsPrefix);
+      if (equalsIndex >= 0)
+      {
+         juce::String value = commandLine.substring(equalsIndex + equalsPrefix.length()).trim();
+         return StripMatchingQuotes(value);
+      }
+
+      const int flagIndex = commandLine.indexOf(flag);
+      if (flagIndex < 0)
+         return {};
+
+      juce::String rest = commandLine.substring(flagIndex + flag.length()).trimStart();
+      if (rest.isEmpty())
+         return {};
+
+      if (rest.startsWithChar('"') || rest.startsWithChar('\''))
+      {
+         const juce::juce_wchar quote = rest[0];
+         const int endQuote = rest.indexOfChar(1, quote);
+         if (endQuote > 0)
+            return rest.substring(1, endQuote);
+         return rest.substring(1);
+      }
+
+      const int space = rest.indexOfChar(' ');
+      if (space >= 0)
+         return rest.substring(0, space);
+      return rest;
+   }
+
+   juce::String ExtractMpvAutomationMediaFromArgs(const juce::StringArray& args, bool* foundFlag = nullptr)
+   {
+      if (foundFlag != nullptr)
+         *foundFlag = false;
+
+      for (int i = 0; i < args.size(); ++i)
+      {
+         const juce::String arg = args[i];
+         if (arg == "--mpv-auto" || arg == "--mpv-automation")
+         {
+            if (foundFlag != nullptr)
+               *foundFlag = true;
+            if (i + 1 < args.size())
+               return StripMatchingQuotes(args[i + 1]);
+         }
+         else if (arg.startsWith("--mpv-auto="))
+         {
+            if (foundFlag != nullptr)
+               *foundFlag = true;
+            return StripMatchingQuotes(arg.fromFirstOccurrenceOf("=", false, false));
+         }
+         else if (arg.startsWith("--mpv-automation="))
+         {
+            if (foundFlag != nullptr)
+               *foundFlag = true;
+            return StripMatchingQuotes(arg.fromFirstOccurrenceOf("=", false, false));
+         }
+      }
+
+      return {};
+   }
+
+#if BESPOKE_WINDOWS
+   juce::StringArray GetWindowsCommandLineArgs()
+   {
+      juce::StringArray args;
+      int argc = 0;
+      LPWSTR* argv = CommandLineToArgvW(GetCommandLineW(), &argc);
+      if (argv == nullptr)
+         return args;
+
+      for (int i = 1; i < argc; ++i)
+         args.add(juce::String(argv[i]));
+
+      LocalFree(argv);
+      return args;
+   }
+#endif
+
+   juce::String GetMpvAutomationMediaFromCurrentCommandLine()
+   {
+      juce::String media = ExtractMpvAutomationMediaFromArgs(juce::JUCEApplication::getCommandLineParameterArray());
+      if (media.isNotEmpty())
+         return media;
+
+      media = ExtractCommandLineFlagValue(juce::JUCEApplication::getCommandLineParameters(), "--mpv-auto");
+      if (media.isEmpty())
+         media = ExtractCommandLineFlagValue(juce::JUCEApplication::getCommandLineParameters(), "--mpv-automation");
+#if BESPOKE_WINDOWS
+      if (media.isEmpty())
+         media = ExtractMpvAutomationMediaFromArgs(GetWindowsCommandLineArgs());
+      if (media.isEmpty())
+         media = ExtractCommandLineFlagValue(juce::String(GetCommandLineW()), "--mpv-auto");
+      if (media.isEmpty())
+         media = ExtractCommandLineFlagValue(juce::String(GetCommandLineW()), "--mpv-automation");
+#endif
+      return media;
+   }
+
+   bool HasMpvAutomationFlagInCurrentCommandLine()
+   {
+      bool foundFlag = false;
+      ExtractMpvAutomationMediaFromArgs(juce::JUCEApplication::getCommandLineParameterArray(), &foundFlag);
+      if (foundFlag)
+         return true;
+
+      const juce::String commandLine = juce::JUCEApplication::getCommandLineParameters();
+      if (commandLine.contains("--mpv-auto") || commandLine.contains("--mpv-automation"))
+         return true;
+
+#if BESPOKE_WINDOWS
+      ExtractMpvAutomationMediaFromArgs(GetWindowsCommandLineArgs(), &foundFlag);
+      if (foundFlag)
+         return true;
+
+      const juce::String rawCommandLine(GetCommandLineW());
+      if (rawCommandLine.contains("--mpv-auto") || rawCommandLine.contains("--mpv-automation"))
+         return true;
+#endif
+
+      return false;
+   }
+}
+
+void QueueStartupMpvAutomationMedia(std::string media)
+{
+   if (media.empty())
+      return;
+
+   if (std::find(sStartupMpvAutomationMedia.begin(), sStartupMpvAutomationMedia.end(), media) != sStartupMpvAutomationMedia.end())
+      return;
+
+   sStartupMpvAutomationMedia.push_back(std::move(media));
 }
 
 //static
@@ -303,11 +452,12 @@ void ModularSynth::Setup(juce::AudioDeviceManager* globalAudioDeviceManager, juc
 
    ResetLayout();
 
+   ParseStartupCommandLine();
+
    mConsoleListener = new ConsoleListener();
    mConsoleEntry = new TextEntry(mConsoleListener, "console", 0, 20, 50, mConsoleText);
    mConsoleEntry->SetRequireEnter(true);
 
-   ParseStartupCommandLine();
 }
 
 void ModularSynth::LoadResources()
@@ -354,28 +504,93 @@ std::string ModularSynth::GetWorkspaceDataPath()
 
 void ModularSynth::ParseStartupCommandLine()
 {
+   bool scheduledMpvAutomation = false;
+   bool sawMpvAutomationFlag = false;
+   auto scheduleMpvAutomation = [&](std::string media)
+   {
+      if (media.empty())
+         media = kDefaultMpvAutomationUrl;
+
+      if (mDelayedStartupMpvAutomationMedia.empty())
+      {
+         LogEvent("scheduled mpv_player_automation after welcome " + media, kLogEventType_Verbose);
+         mDelayedStartupMpvAutomationMedia = std::move(media);
+         mDelayedStartupMpvAutomationFrames = 0;
+         mMpvAutomationStartupProtectionFrames = 180;
+      }
+      scheduledMpvAutomation = true;
+   };
+
    const juce::StringArray args = JUCEApplication::getCommandLineParameterArray();
    for (int i = 0; i < args.size(); ++i)
    {
       const juce::String arg = args[i];
       juce::String media;
+      bool automation = false;
       if (arg == "--mpv" || arg == "--mpv-url")
       {
          if (i + 1 < args.size())
-            media = args[++i];
+            media = StripMatchingQuotes(args[++i]);
+      }
+      else if (arg == "--mpv-auto" || arg == "--mpv-automation")
+      {
+         sawMpvAutomationFlag = true;
+         if (i + 1 < args.size())
+            media = StripMatchingQuotes(args[++i]);
+         automation = true;
       }
       else if (arg.startsWith("--mpv="))
       {
-         media = arg.fromFirstOccurrenceOf("=", false, false);
+         media = StripMatchingQuotes(arg.fromFirstOccurrenceOf("=", false, false));
       }
       else if (arg.startsWith("--mpv-url="))
       {
-         media = arg.fromFirstOccurrenceOf("=", false, false);
+         media = StripMatchingQuotes(arg.fromFirstOccurrenceOf("=", false, false));
+      }
+      else if (arg.startsWith("--mpv-auto="))
+      {
+         sawMpvAutomationFlag = true;
+         media = StripMatchingQuotes(arg.fromFirstOccurrenceOf("=", false, false));
+         automation = true;
+      }
+      else if (arg.startsWith("--mpv-automation="))
+      {
+         sawMpvAutomationFlag = true;
+         media = StripMatchingQuotes(arg.fromFirstOccurrenceOf("=", false, false));
+         automation = true;
       }
 
       if (media.isNotEmpty())
-         QueueMpvMedia(media.toStdString());
+      {
+         if (automation)
+         {
+            scheduleMpvAutomation(media.toStdString());
+         }
+         else
+            QueueMpvMedia(media.toStdString());
+      }
    }
+
+   for (const std::string& media : sStartupMpvAutomationMedia)
+   {
+      scheduleMpvAutomation(media);
+   }
+   sStartupMpvAutomationMedia.clear();
+
+   if (!scheduledMpvAutomation)
+   {
+      const juce::String media = GetMpvAutomationMediaFromCurrentCommandLine();
+      if (media.isNotEmpty())
+         scheduleMpvAutomation(media.toStdString());
+   }
+
+   if (!scheduledMpvAutomation && (sawMpvAutomationFlag || HasMpvAutomationFlagInCurrentCommandLine()))
+   {
+      LogEvent("scheduled mpv_player_automation with default URL from startup flag", kLogEventType_Verbose);
+      scheduleMpvAutomation(kDefaultMpvAutomationUrl);
+   }
+
+   mConsumedStartupMpvAutomationCommandLine = true;
 }
 
 void ModularSynth::QueueMpvMedia(std::string media)
@@ -385,6 +600,45 @@ void ModularSynth::QueueMpvMedia(std::string media)
 
    mQueuedMpvMedia.push_back(std::move(media));
    mWantLoadMpvStartupPatch = true;
+}
+
+void ModularSynth::ReloadInitialLayout()
+{
+   if (mMpvAutomationStartupProtectionFrames > 0 || mWantLoadMpvAutomationPatch || !mQueuedMpvAutomationMedia.empty() || !mPendingStartupMpvAutomationMedia.empty() || !mDelayedStartupMpvAutomationMedia.empty())
+   {
+      LogEvent("ignored initial layout reload during mpv_player_automation startup", kLogEventType_Warning);
+      mWantReloadInitialLayout = false;
+      return;
+   }
+
+   mQueuedMpvAutomationMedia.clear();
+   mDelayedStartupMpvAutomationMedia.clear();
+   mDelayedStartupMpvAutomationFrames = -1;
+   mPendingStartupMpvAutomationMedia.clear();
+   mPendingStartupMpvAutomationFrames = 0;
+   mWantLoadMpvAutomationPatch = false;
+   mWantReloadInitialLayout = true;
+}
+
+void ModularSynth::QueueMpvAutomationMedia(std::string media)
+{
+   if (media.empty())
+      return;
+
+   if (std::find(mQueuedMpvAutomationMedia.begin(), mQueuedMpvAutomationMedia.end(), media) != mQueuedMpvAutomationMedia.end())
+      return;
+
+   LogEvent("queued mpv_player_automation " + media, kLogEventType_Verbose);
+   if (mWelcomeScreen != nullptr)
+      mWelcomeScreen->SetShowing(false);
+   if (mPendingStartupMpvAutomationMedia.empty())
+   {
+      mPendingStartupMpvAutomationMedia = media;
+      mPendingStartupMpvAutomationFrames = 0;
+   }
+   mMpvAutomationStartupProtectionFrames = 180;
+   mQueuedMpvAutomationMedia.push_back(std::move(media));
+   mWantLoadMpvAutomationPatch = true;
 }
 
 void ModularSynth::LoadMpvStartupPatch()
@@ -436,6 +690,8 @@ void ModularSynth::Poll()
 
          if (!mStartupSaveStateFile.empty())
             LoadState(mStartupSaveStateFile);
+         else if (!mPendingStartupMpvAutomationMedia.empty() || mWantLoadMpvAutomationPatch || !mQueuedMpvAutomationMedia.empty())
+            LogEvent("skipping default layout for mpv_player_automation startup", kLogEventType_Verbose);
          else
             LoadLayoutFromFile(ofToDataPath(UserPrefs.layout.Get()));
          mInitialized = true;
@@ -443,8 +699,22 @@ void ModularSynth::Poll()
 
       if (mWantReloadInitialLayout)
       {
-         LoadLayoutFromFile(ofToDataPath(UserPrefs.layout.Get()));
+         if (mMpvAutomationStartupProtectionFrames > 0 || mWantLoadMpvAutomationPatch || !mQueuedMpvAutomationMedia.empty() || !mPendingStartupMpvAutomationMedia.empty() || !mDelayedStartupMpvAutomationMedia.empty())
+            LogEvent("ignored pending initial layout reload during mpv_player_automation startup", kLogEventType_Warning);
+         else
+            LoadLayoutFromFile(ofToDataPath(UserPrefs.layout.Get()));
          mWantReloadInitialLayout = false;
+      }
+
+      if (mInitialized && !mDelayedStartupMpvAutomationMedia.empty())
+      {
+         if (++mDelayedStartupMpvAutomationFrames >= 12)
+         {
+            const std::string media = mDelayedStartupMpvAutomationMedia;
+            mDelayedStartupMpvAutomationMedia.clear();
+            mDelayedStartupMpvAutomationFrames = -1;
+            QueueMpvAutomationMedia(media);
+         }
       }
 
       if (mWantLoadAcuneusPatch)
@@ -811,6 +1081,157 @@ void ModularSynth::Poll()
             candleVideo->EnableAutoLoadPatch();
 
          mWantLoadAwispYoutubePatch = false;
+      }
+
+      if (mWantLoadMpvPatch)
+      {
+         LoadLayoutFromFile(ofToDataPath(UserPrefs.layout.Get()));
+
+         ModuleFactory::Spawnable mpvSpawnable;
+         mpvSpawnable.mLabel = "mpvplayer";
+         auto* mpv = dynamic_cast<MpvPlayer*>(SpawnModuleOnTheFly(mpvSpawnable, 40, 120, true, "mpv_welcome_player"));
+         if (mpv != nullptr)
+            mpv->OpenMedia("https://www.youtube.com/watch?v=SYBc8X2IxqM", true);
+
+         mWantLoadMpvPatch = false;
+      }
+
+      if (mWantLoadMpvAutomationPatch)
+      {
+         std::string mediaOverride;
+         if (!mQueuedMpvAutomationMedia.empty())
+         {
+            mediaOverride = mQueuedMpvAutomationMedia.front();
+         }
+
+         if (mWelcomeScreen != nullptr)
+            mWelcomeScreen->SetShowing(false);
+
+         ModuleFactory::Spawnable automationSpawnable;
+         automationSpawnable.mLabel = "mpv_player_automation";
+         auto* typedAutomation = dynamic_cast<MpvPlayerAutomation*>(SpawnModuleOnTheFly(automationSpawnable, 40, 120, true, "mpv_player_automation"));
+         ScriptModule* automation = typedAutomation;
+         if (automation == nullptr)
+         {
+            LogEvent("mpv_player_automation typed spawn failed; falling back to script module", kLogEventType_Warning);
+            ModuleFactory::Spawnable scriptSpawnable;
+            scriptSpawnable.mLabel = "script";
+            automation = dynamic_cast<ScriptModule*>(SpawnModuleOnTheFly(scriptSpawnable, 40, 120, true, "mpv_player_automation"));
+            if (automation != nullptr)
+            {
+               std::string scriptPath = ofToResourcePath("userdata_original/scripts/mpv_player_automation.py");
+               if (!juce::File(scriptPath).existsAsFile())
+                  scriptPath = ofToDataPath("scripts/mpv_player_automation.py");
+               automation->LoadScriptFile(scriptPath);
+            }
+         }
+         if (automation != nullptr)
+         {
+            if (!mediaOverride.empty())
+            {
+               ScriptModule::InitializePythonIfNecessary();
+               juce::String escaped(mediaOverride);
+               escaped = escaped.replace("\\", "\\\\").replace("\"", "\\\"");
+               automation->RunCode(gTime, "DEFAULT_URL = \"" + escaped.toStdString() + "\"");
+            }
+            automation->ExecuteCode();
+            if (!mediaOverride.empty())
+               LogEvent("mpv_player_automation opened " + mediaOverride, kLogEventType_Verbose);
+            if (!mQueuedMpvAutomationMedia.empty())
+               mQueuedMpvAutomationMedia.erase(mQueuedMpvAutomationMedia.begin());
+            if (mPendingStartupMpvAutomationMedia == mediaOverride || mQueuedMpvAutomationMedia.empty())
+               mPendingStartupMpvAutomationMedia.clear();
+            mMpvAutomationStartupProtectionFrames = 180;
+         }
+         else
+         {
+            LogEvent("could not spawn mpv_player_automation", kLogEventType_Error);
+            if (mWelcomeScreen != nullptr)
+               mWelcomeScreen->SetShowing(false);
+            SetFatalError("could not spawn mpv_player_automation");
+         }
+
+         mWantLoadMpvAutomationPatch = !mQueuedMpvAutomationMedia.empty();
+      }
+
+      if (mMpvAutomationStartupProtectionFrames > 0)
+         --mMpvAutomationStartupProtectionFrames;
+
+      if (mInitialized && !mPendingStartupMpvAutomationMedia.empty())
+      {
+         if (mModuleContainer.FindModule("mpv_player_automation", false) != nullptr)
+         {
+            mPendingStartupMpvAutomationMedia.clear();
+         }
+         else if (++mPendingStartupMpvAutomationFrames > 30)
+         {
+            LogEvent("retrying mpv_player_automation startup spawn " + mPendingStartupMpvAutomationMedia, kLogEventType_Warning);
+            mQueuedMpvAutomationMedia.insert(mQueuedMpvAutomationMedia.begin(), mPendingStartupMpvAutomationMedia);
+            mWantLoadMpvAutomationPatch = true;
+            mPendingStartupMpvAutomationFrames = 0;
+         }
+      }
+
+      if (mWantLoadMpvStableAudioPatch)
+      {
+         LoadLayoutFromFile(ofToDataPath(UserPrefs.layout.Get()));
+
+         ModuleFactory::Spawnable stableAudioSpawnable;
+         stableAudioSpawnable.mLabel = "stableaudio";
+         auto* stableAudio = dynamic_cast<StableAudio*>(SpawnModuleOnTheFly(stableAudioSpawnable, 40, 120));
+
+         ModuleFactory::Spawnable mpvSpawnable;
+         mpvSpawnable.mLabel = "mpvplayer";
+         auto* mpv = dynamic_cast<MpvPlayer*>(SpawnModuleOnTheFly(mpvSpawnable, 520, 120, true, "mpv_stableaudio_player"));
+
+         if (stableAudio != nullptr && mpv != nullptr)
+            stableAudio->GetPatchCableSource()->SetTarget(mpv);
+         if (stableAudio != nullptr)
+            stableAudio->EnableAutoGenerationPatch();
+
+         mWantLoadMpvStableAudioPatch = false;
+      }
+
+      if (mWantLoadMpvCandleVideoPatch)
+      {
+         LoadLayoutFromFile(ofToDataPath(UserPrefs.layout.Get()));
+
+         ModuleFactory::Spawnable candleVideoSpawnable;
+         candleVideoSpawnable.mLabel = "candlevideo";
+         auto* candleVideo = dynamic_cast<CandleVideo*>(SpawnModuleOnTheFly(candleVideoSpawnable, 40, 120));
+
+         ModuleFactory::Spawnable mpvSpawnable;
+         mpvSpawnable.mLabel = "mpvplayer";
+         auto* mpv = dynamic_cast<MpvPlayer*>(SpawnModuleOnTheFly(mpvSpawnable, 650, 120, true, "mpv_candlevideo_player"));
+
+         if (candleVideo != nullptr && mpv != nullptr)
+            candleVideo->GetPatchCableSource()->SetTarget(mpv);
+         if (mpv != nullptr)
+            mpv->OpenMedia("https://www.youtube.com/watch?v=SYBc8X2IxqM", true);
+         if (candleVideo != nullptr)
+            candleVideo->EnableAutoLoadPatch();
+
+         mWantLoadMpvCandleVideoPatch = false;
+      }
+
+      if (mWantLoadMpvVideoSwarmPatch)
+      {
+         LoadLayoutFromFile(ofToDataPath(UserPrefs.layout.Get()));
+
+         ModuleFactory::Spawnable scriptSpawnable;
+         scriptSpawnable.mLabel = "script";
+         auto* script = dynamic_cast<ScriptModule*>(SpawnModuleOnTheFly(scriptSpawnable, 40, 120, true, "mpv_video_swarm_controller"));
+
+         if (script != nullptr)
+         {
+            std::string scriptPath = ofToResourcePath("userdata_original/scripts/mpv_video_swarm.py");
+            if (!juce::File(scriptPath).existsAsFile())
+               scriptPath = ofToDataPath("scripts/mpv_video_swarm.py");
+            if (script->LoadScriptFile(scriptPath))
+               script->ExecuteCode();
+         }
+
+         mWantLoadMpvVideoSwarmPatch = false;
       }
 
       if (mWantLoadMpvStartupPatch)
@@ -3241,7 +3662,8 @@ void ModularSynth::ResetLayout()
       mWelcomeScreen->SetName("welcome");
       mWelcomeScreen->CreateUIControls();
       mWelcomeScreen->Init();
-      if (!mIsLoadingState && sFrameCount < 10 && UserPrefs.show_welcome_screen.Get())
+      const bool hasQueuedMpvAutomation = mWantLoadMpvAutomationPatch || !mQueuedMpvAutomationMedia.empty() || !mPendingStartupMpvAutomationMedia.empty();
+      if (!mIsLoadingState && sFrameCount < 10 && UserPrefs.show_welcome_screen.Get() && !hasQueuedMpvAutomation)
          mWelcomeScreen->Show();
       else
          mWelcomeScreen->SetShowing(false);

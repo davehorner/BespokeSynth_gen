@@ -583,6 +583,8 @@ ofColor IDrawableModule::GetColor(ModuleCategory type)
       color.setHsb(200, 100, 255);
    if (type == kModuleCategory_Pulse)
       color.setHsb(43, sSaturation, sBrightness);
+   if (type == kModuleCategory_Video)
+      color.setHsb(150, 120, 255);
    return color;
 }
 

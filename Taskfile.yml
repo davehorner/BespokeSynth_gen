@@ -255,7 +255,7 @@ tasks:
   run:windows:
     platforms: [windows]
     cmds:
-      - powershell -NoProfile -ExecutionPolicy Bypass -Command "& (Join-Path (Get-Location) '{{.BUILD_DIR}}\Source\BespokeSynth_artefacts\{{.CONFIG}}\BespokeSynth_gen.exe') {{.CLI_ARGS}}"
+      - powershell -NoProfile -ExecutionPolicy Bypass -Command "& (Join-Path (Get-Location) '{{.BUILD_DIR}}\Source\BespokeSynth_artefacts\{{.CONFIG}}\BespokeSynth_gen.exe') --% {{.CLI_ARGS}}"
 
   run:posix:
     platforms: [linux, darwin]

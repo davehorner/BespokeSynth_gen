@@ -24,12 +24,15 @@
 //
 
 #include "StableAudio.h"
+#include "AudioSplitter.h"
 #include "FileStream.h"
 #include "IAudioReceiver.h"
 #include "ModularSynth.h"
+#include "MpvPlayer.h"
 #include "OllamaPromptGenerator.h"
 #include "Profiler.h"
 #include "Sample.h"
+#include "SamplePlayer.h"
 #include "SynthGlobals.h"
 #include "Transport.h"
 #include "UIControlMacros.h"
@@ -544,11 +547,103 @@ void StableAudio::LoadGeneratedSample(const std::string& path)
          mPendingTransportSyncPrompt.clear();
          SyncTransportToPromptBpm();
       }
+
+      LoadGeneratedSampleIntoMpvTargets(path);
+      LoadGeneratedSampleIntoSamplePlayerTargets(path);
    }
    else
    {
       delete sample;
       mStatusString = "couldn't load generated wav";
+   }
+}
+
+std::vector<MpvPlayer*> StableAudio::GetTargetMpvModules()
+{
+   std::vector<MpvPlayer*> mpvModules;
+   std::vector<IAudioReceiver*> visited;
+   CollectTargetMpvModules(GetTarget(), mpvModules, visited);
+   return mpvModules;
+}
+
+void StableAudio::CollectTargetMpvModules(IAudioReceiver* receiver, std::vector<MpvPlayer*>& mpvModules, std::vector<IAudioReceiver*>& visited)
+{
+   if (receiver == nullptr || std::find(visited.begin(), visited.end(), receiver) != visited.end())
+      return;
+   visited.push_back(receiver);
+
+   if (auto* mpv = dynamic_cast<MpvPlayer*>(receiver))
+   {
+      if (std::find(mpvModules.begin(), mpvModules.end(), mpv) == mpvModules.end())
+         mpvModules.push_back(mpv);
+      return;
+   }
+
+   if (auto* splitter = dynamic_cast<AudioSplitter*>(receiver))
+   {
+      for (int i = 0; i < splitter->GetNumTargets(); ++i)
+         CollectTargetMpvModules(splitter->GetTarget(i), mpvModules, visited);
+   }
+}
+
+std::vector<SamplePlayer*> StableAudio::GetTargetSamplePlayerModules()
+{
+   std::vector<SamplePlayer*> samplePlayers;
+   std::vector<IAudioReceiver*> visited;
+   CollectTargetSamplePlayerModules(GetTarget(), samplePlayers, visited);
+   return samplePlayers;
+}
+
+void StableAudio::CollectTargetSamplePlayerModules(IAudioReceiver* receiver, std::vector<SamplePlayer*>& samplePlayers, std::vector<IAudioReceiver*>& visited)
+{
+   if (receiver == nullptr || std::find(visited.begin(), visited.end(), receiver) != visited.end())
+      return;
+   visited.push_back(receiver);
+
+   if (auto* samplePlayer = dynamic_cast<SamplePlayer*>(receiver))
+   {
+      if (std::find(samplePlayers.begin(), samplePlayers.end(), samplePlayer) == samplePlayers.end())
+         samplePlayers.push_back(samplePlayer);
+      return;
+   }
+
+   if (auto* splitter = dynamic_cast<AudioSplitter*>(receiver))
+   {
+      for (int i = 0; i < splitter->GetNumTargets(); ++i)
+         CollectTargetSamplePlayerModules(splitter->GetTarget(i), samplePlayers, visited);
+   }
+}
+
+void StableAudio::LoadGeneratedSampleIntoMpvTargets(const std::string& path)
+{
+   const std::vector<MpvPlayer*> mpvModules = GetTargetMpvModules();
+   for (auto* mpv : mpvModules)
+   {
+      if (mpv == nullptr)
+         continue;
+      mpv->OpenMedia(path, true);
+   }
+}
+
+void StableAudio::LoadGeneratedSampleIntoSamplePlayerTargets(const std::string& path)
+{
+   const std::vector<SamplePlayer*> samplePlayers = GetTargetSamplePlayerModules();
+   for (auto* samplePlayer : samplePlayers)
+   {
+      if (samplePlayer == nullptr)
+         continue;
+      samplePlayer->LoadSampleFile(path, mPlay || mAutoplay);
+   }
+}
+
+void StableAudio::UnloadMpvTargets()
+{
+   const std::vector<MpvPlayer*> mpvModules = GetTargetMpvModules();
+   for (auto* mpv : mpvModules)
+   {
+      if (mpv == nullptr)
+         continue;
+      mpv->UnloadMedia();
    }
 }
 
@@ -761,6 +856,7 @@ void StableAudio::DeleteSelectedGeneratedWav()
       mPendingTransportSyncTime = -1;
       mPendingTransportSyncPrompt.clear();
       UpdatePlaybackControls();
+      UnloadMpvTargets();
    }
 
    const bool deletedWav = wavFile.deleteFile();
@@ -808,6 +904,7 @@ void StableAudio::DeleteAllGeneratedWavs()
       mPendingTransportSyncTime = -1;
       mPendingTransportSyncPrompt.clear();
       UpdatePlaybackControls();
+      UnloadMpvTargets();
    }
 
    int deletedCount = 0;

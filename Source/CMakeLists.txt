@@ -142,10 +142,14 @@ target_sources(BespokeSynth PRIVATE
     AcuneusAutomation.h
     Awisp.cpp
     Awisp.h
+    BespokeReserveSpace.cpp
+    BespokeReserveSpace.h
     CandleVideo.cpp
     CandleVideo.h
     MpvPlayer.cpp
     MpvPlayer.h
+    MpvPlayerAutomation.cpp
+    MpvPlayerAutomation.h
     OllamaPromptGenerator.cpp
     OllamaPromptGenerator.h
     ControlRecorder.cpp

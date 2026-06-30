@@ -63,8 +63,8 @@ private:
    void DrawModule() override;
    void GetModuleDimensions(float& width, float& height) override
    {
-      width = 170;
-      height = 54;
+      width = 270;
+      height = 80;
    }
 
    bool EnsureOpen();
@@ -74,6 +74,7 @@ private:
    float ReadSample(uint64_t frame, int channel) const;
    void SetStatus(const std::string& status);
    void PublishTransportControl();
+   void PublishAutoVisualizerControl();
    void WriteTransportControl(bool shouldPlay);
    void WriteVisualizerControl(int delta);
 
@@ -92,9 +93,17 @@ static constexpr const char* kDefaultStreamName = "/sparkplayer_audio";
    bool mHaveLastTransportPaused{ false };
    bool mLastTransportPaused{ false };
    bool mSyncTransport{ true };
+   bool mAutoVisualizer{ false };
+   float mLastAudioLevel{ 0.0f };
+   float mSmoothedAudioLevel{ 0.0f };
+   float mAutoVisualizerGateLevel{ 0.0f };
+   double mNextAutoVisualizerTime{ 0.0 };
+   double mLastAutoVisualizerPollTime{ 0.0 };
+   uint32_t mAutoVisualizerRandomState{ 0x51f15e5u };
    ClickButton* mVisualizerPrevButton{ nullptr };
    ClickButton* mVisualizerNextButton{ nullptr };
    Checkbox* mSyncTransportCheckbox{ nullptr };
+   Checkbox* mAutoVisualizerCheckbox{ nullptr };
    size_t mMappedBytes{ 0 };
 
 #if BESPOKE_WINDOWS

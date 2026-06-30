@@ -31,6 +31,11 @@ namespace
    constexpr uint32_t kVersion = 1;
    constexpr int kOutputChannels = 2;
    constexpr double kMaxBufferedSeconds = 0.25;
+   constexpr float kAutoVisualizerThreshold = 0.025f;
+   constexpr double kAutoVisualizerMinDelayMs = 2500.0;
+   constexpr double kAutoVisualizerMaxDelayMs = 7000.0;
+   constexpr float kAutoVisualizerLevelRange = 0.18f;
+   constexpr float kAutoVisualizerGateScale = 0.72f;
 
 #if BESPOKE_WINDOWS
    std::string ToWindowsName(const std::string& text)
@@ -117,18 +122,21 @@ void SparkPlayer::CreateUIControls()
 {
    IDrawableModule::CreateUIControls();
 
-   UIBLOCK0();
+   UIBLOCK(3, 58);
    BUTTON(mVisualizerPrevButton, "vis-");
    UIBLOCK_SHIFTRIGHT();
    BUTTON(mVisualizerNextButton, "vis+");
    UIBLOCK_SHIFTRIGHT();
    CHECKBOX(mSyncTransportCheckbox, "sync transport", &mSyncTransport);
+   UIBLOCK_SHIFTRIGHT();
+   CHECKBOX(mAutoVisualizerCheckbox, "auto viz", &mAutoVisualizer);
    ENDUIBLOCK0();
 }
 void SparkPlayer::Poll()
 {
    IDrawableModule::Poll();
    PublishTransportControl();
+   PublishAutoVisualizerControl();
 }
 
 SparkPlayer::~SparkPlayer()
@@ -173,6 +181,7 @@ void SparkPlayer::Process(double time)
    target->GetBuffer()->SetNumActiveChannels(kOutputChannels);
    float* outL = target->GetBuffer()->GetChannel(0);
    float* outR = target->GetBuffer()->GetChannel(1);
+   float levelSum = 0.0f;
    for (int i = 0; i < bufferSize; ++i)
    {
       float left = 0.0f;
@@ -191,9 +200,13 @@ void SparkPlayer::Process(double time)
       }
       outL[i] += left;
       outR[i] += right;
+      levelSum += std::max(std::abs(left), std::abs(right));
       GetVizBuffer()->Write(left, 0);
       GetVizBuffer()->Write(right, 1);
    }
+
+   mLastAudioLevel = levelSum / std::max(1, bufferSize);
+   mSmoothedAudioLevel = mSmoothedAudioLevel * 0.85f + mLastAudioLevel * 0.15f;
 
    if (mHeader->active == 0)
       SetStatus("writer stopped");
@@ -215,6 +228,8 @@ void SparkPlayer::DrawModule()
       mVisualizerNextButton->Draw();
    if (mSyncTransportCheckbox != nullptr)
       mSyncTransportCheckbox->Draw();
+   if (mAutoVisualizerCheckbox != nullptr)
+      mAutoVisualizerCheckbox->Draw();
 }
 
 bool SparkPlayer::EnsureOpen()
@@ -392,6 +407,43 @@ void SparkPlayer::PublishTransportControl()
 #endif
 }
 
+void SparkPlayer::PublishAutoVisualizerControl()
+{
+#if BESPOKE_WINDOWS || SPARKPLAYER_POSIX_SHM
+   if (!mAutoVisualizer)
+      return;
+   if (mHeader == nullptr && !EnsureOpen())
+      return;
+
+   const double elapsedMs = mLastAutoVisualizerPollTime > 0.0 ? std::max(0.0, gTime - mLastAutoVisualizerPollTime) : 0.0;
+   mLastAutoVisualizerPollTime = gTime;
+   if (mAutoVisualizerGateLevel > kAutoVisualizerThreshold)
+   {
+      const float decay = std::pow(0.35f, (float)(elapsedMs / 1000.0));
+      mAutoVisualizerGateLevel = kAutoVisualizerThreshold + (mAutoVisualizerGateLevel - kAutoVisualizerThreshold) * decay;
+   }
+
+   const float level = std::max(mLastAudioLevel, mSmoothedAudioLevel);
+   if (level < kAutoVisualizerThreshold)
+   {
+      mAutoVisualizerGateLevel = kAutoVisualizerThreshold;
+      return;
+   }
+
+   if (gTime < mNextAutoVisualizerTime || level < mAutoVisualizerGateLevel)
+      return;
+
+   mAutoVisualizerRandomState = mAutoVisualizerRandomState * 1664525u + 1013904223u + (uint32_t)(level * 1000000.0f);
+   const double randomAmount = (double)(mAutoVisualizerRandomState & 0xffffu) / 65535.0;
+   const float loudness = ofClamp((level - kAutoVisualizerThreshold) / kAutoVisualizerLevelRange, 0.0f, 1.0f);
+   const double baseDelayMs = ofLerp(kAutoVisualizerMaxDelayMs, kAutoVisualizerMinDelayMs, loudness);
+   const double jitterMs = ofLerp(0.75, 1.35, randomAmount);
+
+   WriteVisualizerControl(1);
+   mAutoVisualizerGateLevel = std::max(kAutoVisualizerThreshold, level * kAutoVisualizerGateScale);
+   mNextAutoVisualizerTime = gTime + baseDelayMs * jitterMs;
+#endif
+}
 void SparkPlayer::ButtonClicked(ClickButton* button, double time)
 {
    if (button == mVisualizerPrevButton)

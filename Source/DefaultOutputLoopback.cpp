@@ -272,7 +272,10 @@ void DefaultOutputLoopback::WriteCapturedFrames(const uint8_t* data, uint32_t fr
    }
    mResamplePosition = sourcePos - frames;
 #else
-   ignoreUnused(data, frames, format, silent);
+   static_cast<void>(data);
+   static_cast<void>(frames);
+   static_cast<void>(formatPtr);
+   static_cast<void>(silent);
 #endif
 }
 

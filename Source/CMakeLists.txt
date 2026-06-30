@@ -1042,37 +1042,68 @@ if(BESPOKE_AWISP_ROOT AND EXISTS "${BESPOKE_AWISP_ROOT}/Cargo.toml")
     endif()
 
     set(BESPOKE_AWISP_CARGO_ARGS build -p awisp-capi --release)
+    set(BESPOKE_AWISP_RUNNER_CARGO_ARGS build -p awisp-capi --bin awisp-runner --release)
     set(BESPOKE_AWISP_EDITOR_CARGO_ARGS build -p wisp-editor --release)
     if(WIN32)
         set(BESPOKE_AWISP_IMPORT_LIBRARY "${BESPOKE_AWISP_CARGO_TARGET_DIR}/release/awisp_capi.dll.lib")
         set(BESPOKE_AWISP_RUNTIME_LIBRARY "${BESPOKE_AWISP_CARGO_TARGET_DIR}/release/awisp_capi.dll")
         set(BESPOKE_AWISP_LINK_LIBRARY "${BESPOKE_AWISP_IMPORT_LIBRARY}")
+        set(BESPOKE_AWISP_RUNNER_RUNTIME "${BESPOKE_AWISP_CARGO_TARGET_DIR}/release/awisp-runner.exe")
         set(BESPOKE_AWISP_EDITOR_RUNTIME "${BESPOKE_AWISP_CARGO_TARGET_DIR}/release/wisp-editor.exe")
     elseif(APPLE)
         set(BESPOKE_AWISP_RUNTIME_LIBRARY "${BESPOKE_AWISP_CARGO_TARGET_DIR}/release/libawisp_capi.dylib")
         set(BESPOKE_AWISP_LINK_LIBRARY "${BESPOKE_AWISP_RUNTIME_LIBRARY}")
+        set(BESPOKE_AWISP_RUNNER_RUNTIME "${BESPOKE_AWISP_CARGO_TARGET_DIR}/release/awisp-runner")
         set(BESPOKE_AWISP_EDITOR_RUNTIME "${BESPOKE_AWISP_CARGO_TARGET_DIR}/release/wisp-editor")
     else()
         set(BESPOKE_AWISP_RUNTIME_LIBRARY "${BESPOKE_AWISP_CARGO_TARGET_DIR}/release/libawisp_capi.so")
         set(BESPOKE_AWISP_LINK_LIBRARY "${BESPOKE_AWISP_RUNTIME_LIBRARY}")
+        set(BESPOKE_AWISP_RUNNER_RUNTIME "${BESPOKE_AWISP_CARGO_TARGET_DIR}/release/awisp-runner")
         set(BESPOKE_AWISP_EDITOR_RUNTIME "${BESPOKE_AWISP_CARGO_TARGET_DIR}/release/wisp-editor")
     endif()
     set(BESPOKE_AWISP_OUTPUTS "${BESPOKE_AWISP_LINK_LIBRARY}" "${BESPOKE_AWISP_RUNTIME_LIBRARY}")
     list(REMOVE_DUPLICATES BESPOKE_AWISP_OUTPUTS)
+    file(GLOB_RECURSE BESPOKE_AWISP_CARGO_SOURCES CONFIGURE_DEPENDS
+        "${BESPOKE_AWISP_ROOT}/Cargo.lock"
+        "${BESPOKE_AWISP_ROOT}/Cargo.toml"
+        "${BESPOKE_AWISP_ROOT}/crates/awisp-capi/Cargo.toml"
+        "${BESPOKE_AWISP_ROOT}/crates/awisp-capi/src/*.rs"
+        "${BESPOKE_AWISP_ROOT}/src/*.rs"
+    )
+    file(GLOB_RECURSE BESPOKE_AWISP_EDITOR_SOURCES CONFIGURE_DEPENDS
+        "${BESPOKE_AWISP_ROOT}/Cargo.lock"
+        "${BESPOKE_AWISP_ROOT}/Cargo.toml"
+        "${BESPOKE_AWISP_ROOT}/assets/*.wgsl"
+        "${BESPOKE_AWISP_ROOT}/editor/Cargo.toml"
+        "${BESPOKE_AWISP_ROOT}/editor/src/*.rs"
+        "${BESPOKE_AWISP_ROOT}/src/*.rs"
+    )
 
     add_custom_command(
         OUTPUT ${BESPOKE_AWISP_OUTPUTS}
         COMMAND ${CMAKE_COMMAND} -E env "CARGO_TARGET_DIR=${BESPOKE_AWISP_CARGO_TARGET_DIR}" ${CARGO_EXECUTABLE} ${BESPOKE_AWISP_CARGO_ARGS}
         WORKING_DIRECTORY "${BESPOKE_AWISP_ROOT}"
+        DEPENDS ${BESPOKE_AWISP_CARGO_SOURCES}
         VERBATIM
     )
     add_custom_target(awisp_capi_build DEPENDS ${BESPOKE_AWISP_OUTPUTS})
     add_dependencies(BespokeSynth awisp_capi_build)
 
     add_custom_command(
+        OUTPUT "${BESPOKE_AWISP_RUNNER_RUNTIME}"
+        COMMAND ${CMAKE_COMMAND} -E env "CARGO_TARGET_DIR=${BESPOKE_AWISP_CARGO_TARGET_DIR}" ${CARGO_EXECUTABLE} ${BESPOKE_AWISP_RUNNER_CARGO_ARGS}
+        WORKING_DIRECTORY "${BESPOKE_AWISP_ROOT}"
+        DEPENDS ${BESPOKE_AWISP_CARGO_SOURCES}
+        VERBATIM
+    )
+    add_custom_target(awisp_runner_build DEPENDS "${BESPOKE_AWISP_RUNNER_RUNTIME}")
+    add_dependencies(BespokeSynth awisp_runner_build)
+
+    add_custom_command(
         OUTPUT "${BESPOKE_AWISP_EDITOR_RUNTIME}"
         COMMAND ${CMAKE_COMMAND} -E env "CARGO_TARGET_DIR=${BESPOKE_AWISP_CARGO_TARGET_DIR}" ${CARGO_EXECUTABLE} ${BESPOKE_AWISP_EDITOR_CARGO_ARGS}
         WORKING_DIRECTORY "${BESPOKE_AWISP_ROOT}"
+        DEPENDS ${BESPOKE_AWISP_EDITOR_SOURCES}
         VERBATIM
     )
     add_custom_target(awisp_editor_build DEPENDS "${BESPOKE_AWISP_EDITOR_RUNTIME}")
@@ -1087,6 +1118,7 @@ if(BESPOKE_AWISP_ROOT AND EXISTS "${BESPOKE_AWISP_ROOT}/Cargo.toml")
 
     add_custom_command(TARGET BespokeSynth POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_if_different "${BESPOKE_AWISP_RUNTIME_LIBRARY}" "$<TARGET_FILE_DIR:BespokeSynth>"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different "${BESPOKE_AWISP_RUNNER_RUNTIME}" "$<TARGET_FILE_DIR:BespokeSynth>"
         COMMAND ${CMAKE_COMMAND} -E copy_if_different "${BESPOKE_AWISP_EDITOR_RUNTIME}" "$<TARGET_FILE_DIR:BespokeSynth>"
         VERBATIM
     )

@@ -100,9 +100,14 @@ private:
    void ApplyRemotePort();
    void PushAudioToInstance();
    void AdvanceMediaFrames();
+   void OpenExternalInstance();
+   void CloseExternalInstance();
+   void PollExternalStatus();
+   bool SendExternalCommand(const std::string& command) const;
    void OpenEditor();
    void CloseEditor();
    void PollEditorStatus();
+   std::string GetRunnerExecutablePath() const;
    std::string GetEditorExecutablePath() const;
    std::string GetSelectedShaderName() const;
    std::string GetAssetRoot() const;
@@ -129,6 +134,7 @@ private:
    double mLastMediaFrameTime{ -9999.0 };
    std::vector<float> mInterleavedAudio;
    bool mMusicAutomation{ false };
+   bool mExternalInstance{ false };
    float mMusicAutomationAmount{ 0.65f };
    float mAutomationLevel{ 0.0f };
    double mLastAutomationSendTime{ -9999.0 };
@@ -149,4 +155,5 @@ private:
    Checkbox* mMusicAutomationCheckbox{ nullptr };
    FloatSlider* mMusicAutomationSlider{ nullptr };
    juce::ChildProcess mEditorProcess;
+   juce::ChildProcess mExternalProcess;
 };

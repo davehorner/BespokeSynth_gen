@@ -127,6 +127,7 @@ void Awisp::CreateUIControls()
 void Awisp::DrawModule()
 {
    PollInstanceStatus();
+   PollExternalStatus();
    PollEditorStatus();
 
    if (Minimized() || !IsVisible())
@@ -310,8 +311,28 @@ void Awisp::RefreshParamControls()
 void Awisp::SendParam(ParamControl& param)
 {
 #if BESPOKE_AWISP_ENABLED
-   if (mInstance == nullptr)
+   if (mInstance == nullptr && !mExternalInstance)
       return;
+
+   if (mExternalInstance)
+   {
+      if (param.type == AWISP_PARAM_BOOL)
+         SendExternalCommand("set_bool " + param.id + " " + (param.boolValue ? "true" : "false"));
+      else if (param.type == AWISP_PARAM_I32)
+         SendExternalCommand("set_i32 " + param.id + " " + std::to_string(param.intValue));
+      else if (param.type == AWISP_PARAM_U32)
+         SendExternalCommand("set_u32 " + param.id + " " + std::to_string(std::max(0, param.intValue)));
+      else
+      {
+         const int components = std::clamp(param.componentCount, 1, 4);
+         std::string command = components == 1 ? "set_f32 " : "set_vec" + std::to_string(components) + " ";
+         command += param.id;
+         for (int i = 0; i < components; ++i)
+            command += " " + std::to_string(param.values[(size_t)i]);
+         SendExternalCommand(command);
+      }
+      return;
+   }
 
    if (param.type == AWISP_PARAM_BOOL)
       awisp_instance_set_param_bool(mInstance, param.id.c_str(), param.boolValue);
@@ -351,6 +372,10 @@ void Awisp::SetParamControlDisplayNames(ParamControl& param)
 void Awisp::OpenInstance()
 {
 #if BESPOKE_AWISP_ENABLED
+#if JUCE_MAC
+   OpenExternalInstance();
+   return;
+#endif
    const std::string shaderName = GetSelectedShaderName();
    if (!mEmbedded)
    {
@@ -440,13 +465,19 @@ bool Awisp::SetMediaPath(const std::string& path)
       mLastMediaFrameTime = -9999.0;
    }
 
-   if (mInstance == nullptr)
+   if (mInstance == nullptr && !mExternalInstance)
       OpenInstance();
-   if (mInstance == nullptr)
+   if (mInstance == nullptr && !mExternalInstance)
       return false;
 
 #if BESPOKE_AWISP_ENABLED
    const std::string normalizedPath = juce::File(path).getFullPathName().replace("\\", "/").toStdString();
+   if (mExternalInstance)
+   {
+      SendExternalCommand("load_image " + normalizedPath);
+      SetStatus("loaded media " + juce::File(normalizedPath).getFileName().toStdString());
+      return true;
+   }
    if (!awisp_instance_load_image(mInstance, normalizedPath.c_str()))
    {
       const char* error = awisp_last_error();
@@ -487,7 +518,7 @@ void Awisp::Process(double)
    UpdateAudioAutomationLevel();
    ApplyMusicAutomation();
 
-   if (mInstance != nullptr)
+   if (mInstance != nullptr || mExternalInstance)
       PushAudioToInstance();
 
    IAudioReceiver* target = GetTarget();
@@ -507,6 +538,7 @@ void Awisp::Process(double)
 void Awisp::CloseInstance()
 {
 #if BESPOKE_AWISP_ENABLED
+   CloseExternalInstance();
    if (mInstance != nullptr)
    {
       awisp_instance_free(mInstance);
@@ -516,6 +548,76 @@ void Awisp::CloseInstance()
    mInstance = nullptr;
 #endif
    ClearParamControls();
+}
+
+void Awisp::OpenExternalInstance()
+{
+#if BESPOKE_AWISP_ENABLED
+   const std::string shaderName = GetSelectedShaderName();
+   if (mExternalProcess.isRunning())
+   {
+      mExternalInstance = true;
+      SendExternalCommand("load_shader " + shaderName);
+      SendExternalCommand("visible true");
+      ApplyWindowGeometry();
+      ApplyTitleBarVisible();
+      SetStatus("opened external " + shaderName);
+      return;
+   }
+
+   const std::string runnerPath = GetRunnerExecutablePath();
+   juce::File runnerFile(runnerPath);
+   if (!runnerFile.existsAsFile())
+   {
+      SetStatus("missing awisp runner: " + runnerPath);
+      return;
+   }
+
+   juce::StringArray args;
+   args.add(runnerFile.getFullPathName());
+   args.add(mAssetRoot);
+   args.add(shaderName);
+   args.add("Awisp");
+   args.add(juce::String((int)std::round(mWindowX)));
+   args.add(juce::String((int)std::round(mWindowY)));
+   args.add(juce::String(std::max(1, mWindowWidth)));
+   args.add(juce::String(std::max(1, mWindowHeight)));
+   args.add(juce::String(std::clamp(mRemotePort, 1024, 65535)));
+
+   if (mExternalProcess.start(args, 0))
+   {
+      mExternalInstance = true;
+      SetStatus("opened external " + shaderName);
+   }
+   else
+      SetStatus("failed to launch awisp runner");
+#endif
+}
+
+void Awisp::CloseExternalInstance()
+{
+   mExternalInstance = false;
+   if (mExternalProcess.isRunning())
+      mExternalProcess.kill();
+}
+
+void Awisp::PollExternalStatus()
+{
+   if (!mExternalInstance)
+      return;
+   if (!mExternalProcess.isRunning())
+   {
+      mExternalInstance = false;
+      SetStatus("awisp runner closed");
+   }
+}
+
+bool Awisp::SendExternalCommand(const std::string& command) const
+{
+   if (!mExternalInstance || command.empty())
+      return false;
+   juce::DatagramSocket socket(false);
+   return socket.write("127.0.0.1", std::clamp(mRemotePort, 1024, 65535), command.data(), (int)command.size()) == (int)command.size();
 }
 
 void Awisp::UpdateAudioAutomationLevel()
@@ -545,7 +647,7 @@ void Awisp::UpdateAudioAutomationLevel()
 
 void Awisp::ApplyMusicAutomation()
 {
-   if (!mMusicAutomation || mInstance == nullptr || gTime <= mLastAutomationSendTime + 50.0)
+   if (!mMusicAutomation || (mInstance == nullptr && !mExternalInstance) || gTime <= mLastAutomationSendTime + 50.0)
       return;
 
    const float drive = std::clamp(mAutomationLevel * std::clamp(mMusicAutomationAmount, 0.0f, 1.0f) * 4.0f, 0.0f, 1.0f);
@@ -659,9 +761,24 @@ std::string Awisp::GetEditorExecutablePath() const
    return juce::File::getSpecialLocation(juce::File::currentExecutableFile).getSiblingFile(kEditorName).getFullPathName().toStdString();
 }
 
+std::string Awisp::GetRunnerExecutablePath() const
+{
+#if JUCE_WINDOWS
+   constexpr const char* kRunnerName = "awisp-runner.exe";
+#else
+   constexpr const char* kRunnerName = "awisp-runner";
+#endif
+   return juce::File::getSpecialLocation(juce::File::currentExecutableFile).getSiblingFile(kRunnerName).getFullPathName().toStdString();
+}
+
 void Awisp::ApplyWindowGeometry()
 {
 #if BESPOKE_AWISP_ENABLED
+   if (mExternalInstance)
+   {
+      SendExternalCommand("window " + std::to_string((int)std::round(mWindowX)) + " " + std::to_string((int)std::round(mWindowY)) + " " + std::to_string(std::max(1, mWindowWidth)) + " " + std::to_string(std::max(1, mWindowHeight)));
+      return;
+   }
    if (mInstance == nullptr)
       return;
    awisp_instance_set_geometry(mInstance, (int)std::round(mWindowX), (int)std::round(mWindowY), (uint32_t)std::max(1, mWindowWidth), (uint32_t)std::max(1, mWindowHeight));
@@ -671,6 +788,11 @@ void Awisp::ApplyWindowGeometry()
 void Awisp::ApplyTitleBarVisible()
 {
 #if BESPOKE_AWISP_ENABLED
+   if (mExternalInstance)
+   {
+      SendExternalCommand(std::string("titlebar ") + (mTitleBarVisible >= 0.5f ? "true" : "false"));
+      return;
+   }
    if (mInstance == nullptr)
       return;
    awisp_instance_set_title_bar_visible(mInstance, mTitleBarVisible >= 0.5f);
@@ -680,6 +802,11 @@ void Awisp::ApplyTitleBarVisible()
 void Awisp::ApplyRemotePort()
 {
 #if BESPOKE_AWISP_ENABLED
+   if (mExternalInstance)
+   {
+      SetStatus("osc/udp " + std::to_string(mRemotePort));
+      return;
+   }
    if (mInstance == nullptr)
       return;
 
@@ -696,7 +823,7 @@ void Awisp::ApplyRemotePort()
 void Awisp::PushAudioToInstance()
 {
 #if BESPOKE_AWISP_ENABLED
-   if (mInstance == nullptr)
+   if (mInstance == nullptr && !mExternalInstance)
       return;
    const int channels = std::clamp(GetBuffer()->NumActiveChannels(), 1, GetBuffer()->NumTotalChannels());
    const int frames = GetBuffer()->BufferSize();
@@ -708,6 +835,15 @@ void Awisp::PushAudioToInstance()
       for (int ch = 0; ch < channels; ++ch)
          mInterleavedAudio[(size_t)i * (size_t)channels + (size_t)ch] = GetBuffer()->GetChannel(ch)[i];
    }
+   if (mExternalInstance)
+   {
+      std::string command = "audio " + std::to_string(channels);
+      command.reserve(command.size() + mInterleavedAudio.size() * 8);
+      for (float sample : mInterleavedAudio)
+         command += " " + std::to_string(sample);
+      SendExternalCommand(command);
+      return;
+   }
    awisp_instance_push_audio(mInstance, mInterleavedAudio.data(), (size_t)frames, (size_t)channels);
 #endif
 }
@@ -715,7 +851,7 @@ void Awisp::PushAudioToInstance()
 void Awisp::AdvanceMediaFrames()
 {
 #if BESPOKE_AWISP_ENABLED
-   if (mInstance == nullptr || mMediaFramePaths.size() <= 1)
+   if ((mInstance == nullptr && !mExternalInstance) || mMediaFramePaths.size() <= 1)
       return;
 
    const double intervalMs = 1000.0 / std::max(1.0f, mMediaFrameFps);
@@ -725,6 +861,11 @@ void Awisp::AdvanceMediaFrames()
    mLastMediaFrameTime = gTime;
    mMediaFrameIndex = (mMediaFrameIndex + 1) % (int)mMediaFramePaths.size();
    const std::string normalizedPath = juce::File(mMediaFramePaths[(size_t)mMediaFrameIndex]).getFullPathName().replace("\\", "/").toStdString();
+   if (mExternalInstance)
+   {
+      SendExternalCommand("load_image " + normalizedPath);
+      return;
+   }
    if (!awisp_instance_load_image(mInstance, normalizedPath.c_str()))
    {
       const char* error = awisp_last_error();
@@ -783,7 +924,12 @@ void Awisp::ButtonClicked(ClickButton* button, double)
       OpenInstance();
    if (button == mCloseButton)
    {
-      if (mInstance != nullptr)
+      if (mExternalInstance)
+      {
+         SendExternalCommand("visible false");
+         SetStatus("hidden");
+      }
+      else if (mInstance != nullptr)
       {
          awisp_instance_set_visible(mInstance, false);
          SetStatus("hidden");
@@ -796,7 +942,7 @@ void Awisp::DropdownUpdated(DropdownList* list, int oldVal, double)
    if (list == mShaderDropdown && oldVal != mSelectedShader)
    {
       RefreshParamControls();
-      if (mInstance != nullptr)
+      if (mInstance != nullptr || mExternalInstance)
          OpenInstance();
       return;
    }
@@ -860,7 +1006,7 @@ void Awisp::IntSliderUpdated(IntSlider* slider, int, double)
 void Awisp::TextEntryComplete(TextEntry*)
 {
    RefreshParamControls();
-   if (mInstance != nullptr)
+   if (mInstance != nullptr || mExternalInstance)
       OpenInstance();
 }
 

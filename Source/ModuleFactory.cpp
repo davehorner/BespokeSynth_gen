@@ -284,6 +284,7 @@
 #include "SessionOrganizer.h"
 #include "AudioSyncer.h"
 #include "StableAudio.h"
+#include "SparkPlayer.h"
 #include "BespokeReserveSpace.h"
 #include "CandleVideo.h"
 #include "MpvPlayer.h"
@@ -529,6 +530,7 @@ ModuleFactory::ModuleFactory()
    REGISTER(SessionOrganizer, sessionorganizer, kModuleCategory_Other);
    REGISTER(AudioSyncer, audiosyncer, kModuleCategory_Audio);
    REGISTER(StableAudio, stableaudio, kModuleCategory_Synth);
+   REGISTER(SparkPlayer, sparkplayer, kModuleCategory_Synth);
    REGISTER(BespokeReserveSpace, bespoke_reserve_space, kModuleCategory_Other);
    REGISTER(CandleVideo, candlevideo, kModuleCategory_Video);
    REGISTER(MpvPlayer, mpvplayer, kModuleCategory_Video);

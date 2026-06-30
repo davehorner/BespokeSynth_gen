@@ -714,6 +714,8 @@ target_sources(BespokeSynth PRIVATE
     Splitter.h
     StableAudio.cpp
     StableAudio.h
+    SparkPlayer.cpp
+    SparkPlayer.h
     StepSequencer.cpp
     StepSequencer.h
     StereoRotation.cpp
@@ -1270,6 +1272,7 @@ elseif (WIN32)
         VS_DEBUGGER_ENVIRONMENT       "PATH=%PATH%;${CMAKE_PREFIX_PATH}/bin")
 else ()
     target_compile_definitions(BespokeSynth PRIVATE BESPOKE_LINUX=1)
+    target_link_libraries(BespokeSynth PRIVATE rt)
 
     # Finally provide install rules if folks want to install into CMAKE_INSTALL_PREFIX
     install(TARGETS BespokeSynth DESTINATION bin)

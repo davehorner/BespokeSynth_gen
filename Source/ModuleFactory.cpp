@@ -283,6 +283,8 @@
 #include "ZeroCrossRate.h"
 #include "SessionOrganizer.h"
 #include "AudioSyncer.h"
+#include "ChordKeyboard.h"
+#include "TapeLooper.h"
 #include "StableAudio.h"
 #include "SparkPlayer.h"
 #include "BespokeReserveSpace.h"
@@ -529,6 +531,8 @@ ModuleFactory::ModuleFactory()
    REGISTER(ZeroCrossRate, zerocrossrate, kModuleCategory_Modulator);
    REGISTER(SessionOrganizer, sessionorganizer, kModuleCategory_Other);
    REGISTER(AudioSyncer, audiosyncer, kModuleCategory_Audio);
+   REGISTER(ChordKeyboard, chordkeyboard, kModuleCategory_Note);
+   REGISTER(TapeLooper, tapelooper, kModuleCategory_Audio);
    REGISTER(StableAudio, stableaudio, kModuleCategory_Synth);
    REGISTER(SparkPlayer, sparkplayer, kModuleCategory_Synth);
    REGISTER(BespokeReserveSpace, bespoke_reserve_space, kModuleCategory_Other);
@@ -539,7 +543,6 @@ ModuleFactory::ModuleFactory()
    REGISTER(AcuneusAutomation, acuneus_automation, kModuleCategory_Video);
    REGISTER(Awisp, awisp, kModuleCategory_Video);
    REGISTER(DefaultOutputLoopback, defaultoutput, kModuleCategory_Audio);
-
    //REGISTER_EXPERIMENTAL(MidiPlayer, midiplayer, kModuleCategory_Instrument);
    REGISTER_HIDDEN(Autotalent, autotalent, kModuleCategory_Audio);
    REGISTER_HIDDEN(TakeRecorder, takerecorder, kModuleCategory_Audio);

@@ -653,13 +653,6 @@ void SamplePlayer::DownloadYoutube(std::string url, std::string title)
    if (mSample)
       mSample->SetPlayPosition(0);
 
-   auto tempDownloadName = ofToString(this) + "_youtube.m4a";
-   {
-      auto file = juce::File(ofToDataPath(tempDownloadName));
-      if (file.existsAsFile())
-         file.deleteFile();
-   }
-
    auto tempConvertedName = ofToString(this) + "_youtube.wav";
    {
       auto file = juce::File(ofToDataPath(tempConvertedName));
@@ -679,7 +672,7 @@ void SamplePlayer::DownloadYoutube(std::string url, std::string title)
    args.add("--ffmpeg-location");
    args.add(UserPrefs.ffmpeg_path.Get());
    args.add("-o");
-   args.add(ofToDataPath(tempDownloadName));
+   args.add(ofToDataPath(tempConvertedName));
 
    mRunningProcessType = RunningProcessType::DownloadYoutube;
 
@@ -1312,6 +1305,12 @@ void SamplePlayer::oscBundleReceived(const OSCBundle& bundle)
 
 bool SamplePlayer::MouseScrolled(float x, float y, float scrollX, float scrollY, bool isSmoothScroll, bool isInvertedScroll)
 {
+   if (GetKeyModifiers() & kModifier_Alt)
+   {
+      scrollX = scrollY;
+      scrollY = 0;
+   }
+
    if (fabs(scrollX) > fabsf(scrollY))
       scrollY = 0;
    else

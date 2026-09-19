@@ -16,6 +16,8 @@
 
 #if BESPOKE_AWISP_ENABLED
 #include "awisp_capi.h"
+extern "C" bool awisp_instance_get_geometry(const AwispInstance* instance, int32_t* outX, int32_t* outY, uint32_t* outWidth, uint32_t* outHeight);
+extern "C" AwispInstance* awisp_instance_open_embedded_with_title_bar(const char* assetRoot, const char* shaderName, const char* windowTitle, int32_t windowX, int32_t windowY, uint32_t windowWidth, uint32_t windowHeight, bool titleBarVisible);
 #endif
 
 #include <algorithm>
@@ -127,6 +129,7 @@ void Awisp::CreateUIControls()
 void Awisp::DrawModule()
 {
    PollInstanceStatus();
+   SyncWindowGeometryFromInstance();
    PollExternalStatus();
    PollEditorStatus();
 
@@ -400,7 +403,7 @@ void Awisp::OpenInstance()
       }
       return;
    }
-   mInstance = awisp_instance_open_embedded(mAssetRoot.c_str(), shaderName.c_str(), "Awisp", (int)std::round(mWindowX), (int)std::round(mWindowY), (uint32_t)std::max(1, mWindowWidth), (uint32_t)std::max(1, mWindowHeight));
+   mInstance = awisp_instance_open_embedded_with_title_bar(mAssetRoot.c_str(), shaderName.c_str(), "Awisp", (int)std::round(mWindowX), (int)std::round(mWindowY), (uint32_t)std::max(1, mWindowWidth), (uint32_t)std::max(1, mWindowHeight), mTitleBarVisible >= 0.5f);
    if (mInstance == nullptr)
    {
       const char* error = awisp_last_error();
@@ -583,10 +586,12 @@ void Awisp::OpenExternalInstance()
    args.add(juce::String(std::max(1, mWindowWidth)));
    args.add(juce::String(std::max(1, mWindowHeight)));
    args.add(juce::String(std::clamp(mRemotePort, 1024, 65535)));
+   args.add(mTitleBarVisible >= 0.5f ? "1" : "0");
 
    if (mExternalProcess.start(args, 0))
    {
       mExternalInstance = true;
+      ApplyTitleBarVisible();
       SetStatus("opened external " + shaderName);
    }
    else
@@ -773,6 +778,7 @@ std::string Awisp::GetRunnerExecutablePath() const
 
 void Awisp::ApplyWindowGeometry()
 {
+   mLastWindowGeometryApplyTime = gTime;
 #if BESPOKE_AWISP_ENABLED
    if (mExternalInstance)
    {
@@ -785,6 +791,44 @@ void Awisp::ApplyWindowGeometry()
 #endif
 }
 
+void Awisp::SyncWindowGeometryFromInstance()
+{
+#if BESPOKE_AWISP_ENABLED
+   if (mExternalInstance || mInstance == nullptr || gTime <= mLastWindowGeometryPollTime + 100.0 || gTime <= mLastWindowGeometryApplyTime + 500.0)
+      return;
+
+   mLastWindowGeometryPollTime = gTime;
+   int32_t x = 0;
+   int32_t y = 0;
+   uint32_t width = 0;
+   uint32_t height = 0;
+   if (!awisp_instance_get_geometry(mInstance, &x, &y, &width, &height))
+      return;
+
+   const bool changed = std::abs(mWindowX - (float)x) >= 0.5f ||
+      std::abs(mWindowY - (float)y) >= 0.5f ||
+      mWindowWidth != (int)width ||
+      mWindowHeight != (int)height;
+   if (!changed)
+      return;
+
+   mWindowX = (float)x;
+   mWindowY = (float)y;
+   mWindowWidth = (int)std::max<uint32_t>(1, width);
+   mWindowHeight = (int)std::max<uint32_t>(1, height);
+
+   mApplyingWindowFeedback = true;
+   if (mXSlider != nullptr)
+      mXSlider->SetValue(mWindowX, gTime, false);
+   if (mYSlider != nullptr)
+      mYSlider->SetValue(mWindowY, gTime, false);
+   if (mWidthSlider != nullptr)
+      mWidthSlider->SetValue((float)mWindowWidth, gTime, false);
+   if (mHeightSlider != nullptr)
+      mHeightSlider->SetValue((float)mWindowHeight, gTime, false);
+   mApplyingWindowFeedback = false;
+#endif
+}
 void Awisp::ApplyTitleBarVisible()
 {
 #if BESPOKE_AWISP_ENABLED
@@ -959,6 +1003,9 @@ void Awisp::DropdownUpdated(DropdownList* list, int oldVal, double)
 
 void Awisp::FloatSliderUpdated(FloatSlider* slider, float, double)
 {
+   if (mApplyingWindowFeedback)
+      return;
+
    if (slider == mMusicAutomationSlider)
       return;
 
@@ -985,6 +1032,9 @@ void Awisp::FloatSliderUpdated(FloatSlider* slider, float, double)
 
 void Awisp::IntSliderUpdated(IntSlider* slider, int, double)
 {
+   if (mApplyingWindowFeedback)
+      return;
+
    if (slider == mPortSlider)
    {
       ApplyRemotePort();
@@ -1042,19 +1092,51 @@ void Awisp::CheckboxUpdated(Checkbox* checkbox, double)
 
 void Awisp::LoadLayout(const ofxJSONElement& moduleInfo)
 {
+   mModuleSaveData.LoadFloat("x", moduleInfo, 140.0f, -4000.0f, 4000.0f);
+   mModuleSaveData.LoadFloat("y", moduleInfo, 140.0f, -4000.0f, 4000.0f);
+   mModuleSaveData.LoadInt("w", moduleInfo, 800, 1, 4096);
+   mModuleSaveData.LoadInt("h", moduleInfo, 600, 1, 4096);
    mModuleSaveData.LoadInt("remote_port", moduleInfo, 7941, 1024, 65535);
+   mModuleSaveData.LoadFloat("title_bar_visible", moduleInfo, 1.0f, 0.0f, 1.0f);
    SetUpFromSaveData();
 }
 
 void Awisp::SaveLayout(ofxJSONElement& moduleInfo)
 {
+   moduleInfo["x"] = mWindowX;
+   moduleInfo["y"] = mWindowY;
+   moduleInfo["w"] = mWindowWidth;
+   moduleInfo["h"] = mWindowHeight;
    moduleInfo["remote_port"] = mRemotePort;
+   moduleInfo["title_bar_visible"] = mTitleBarVisible;
 }
 
 void Awisp::SetUpFromSaveData()
 {
+   if (mModuleSaveData.HasProperty("x"))
+      mWindowX = mModuleSaveData.GetFloat("x");
+   if (mModuleSaveData.HasProperty("y"))
+      mWindowY = mModuleSaveData.GetFloat("y");
+   if (mModuleSaveData.HasProperty("w"))
+      mWindowWidth = std::max(1, mModuleSaveData.GetInt("w"));
+   if (mModuleSaveData.HasProperty("h"))
+      mWindowHeight = std::max(1, mModuleSaveData.GetInt("h"));
    if (mModuleSaveData.HasProperty("remote_port"))
       mRemotePort = mModuleSaveData.GetInt("remote_port");
+   if (mModuleSaveData.HasProperty("title_bar_visible"))
+      mTitleBarVisible = mModuleSaveData.GetFloat("title_bar_visible");
+   if (mXSlider != nullptr)
+      mXSlider->SetValue(mWindowX, gTime, false);
+   if (mYSlider != nullptr)
+      mYSlider->SetValue(mWindowY, gTime, false);
+   if (mWidthSlider != nullptr)
+      mWidthSlider->SetValue((float)mWindowWidth, gTime, false);
+   if (mHeightSlider != nullptr)
+      mHeightSlider->SetValue((float)mWindowHeight, gTime, false);
+   if (mTitleBarSlider != nullptr)
+      mTitleBarSlider->SetValue(mTitleBarVisible, gTime, false);
+   if (mPortSlider != nullptr)
+      mPortSlider->SetValue((float)mRemotePort, gTime, false);
    RefreshShaderList();
 }
 

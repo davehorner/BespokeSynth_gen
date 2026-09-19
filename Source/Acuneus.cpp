@@ -360,6 +360,11 @@ void Acuneus::Poll()
       SendTransport();
    if (mInstance != nullptr && gTime > mLastMouseSendTime + 33.0)
       UpdateTrackedMouseParams();
+   if (mInstance != nullptr && gTime > mLastWindowPositionPollTime + 100.0)
+   {
+      CaptureCurrentWindowPosition();
+      mLastWindowPositionPollTime = gTime;
+   }
    if (mInstance != nullptr && mPendingChromeApplies > 0)
    {
       --mPendingChromeApplies;
@@ -1425,12 +1430,31 @@ void Acuneus::CaptureCurrentWindowPosition()
    if (cuneus_get_window_position(mInstance, &x, &y) != CUNEUS_STATUS_OK)
       return;
 
-   mWindowX = (float)x;
-   mWindowY = (float)y;
+   const float newWindowX = (float)x;
+   const float newWindowY = (float)y;
+   if (std::abs(mWindowX - newWindowX) < 0.5f && std::abs(mWindowY - newWindowY) < 0.5f)
+      return;
+
+   mWindowX = newWindowX;
+   mWindowY = newWindowY;
+   if (mAnchorWindow)
+   {
+      float anchorBaseX = 0;
+      float anchorBaseY = 0;
+      if (CalculateAnchoredWindowPosition(anchorBaseX, anchorBaseY, false))
+      {
+         mAnchorOffsetX = mWindowX - anchorBaseX;
+         mAnchorOffsetY = mWindowY - anchorBaseY;
+      }
+   }
+
+   mApplyingFeedback = true;
    if (mWindowXSlider != nullptr)
       mWindowXSlider->SetValue(mWindowX, gTime, false);
    if (mWindowYSlider != nullptr)
       mWindowYSlider->SetValue(mWindowY, gTime, false);
+   mApplyingFeedback = false;
+   SaveSelectedWindowState();
 #endif
 }
 

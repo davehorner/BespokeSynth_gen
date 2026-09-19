@@ -229,6 +229,7 @@ private:
    double mLastMusicAutomationSendTime{ -9999 };
    double mLastAudioSpectrumSendTime{ -9999 };
    double mLastMouseSendTime{ -9999 };
+   double mLastWindowPositionPollTime{ -9999 };
    bool mHasAudioSpectrum{ false };
    int mWindowBaseWidth{ 800 };
    int mWindowBaseHeight{ 600 };

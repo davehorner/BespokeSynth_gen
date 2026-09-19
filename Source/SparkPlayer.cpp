@@ -13,6 +13,7 @@
 #include "ModularSynth.h"
 #include "Profiler.h"
 #include "SynthGlobals.h"
+#include "Transport.h"
 #include "UIControlMacros.h"
 
 #include <algorithm>
@@ -28,7 +29,7 @@
 namespace
 {
    constexpr uint32_t kMagic = 'S' | ('P' << 8) | ('R' << 16) | ('K' << 24);
-   constexpr uint32_t kVersion = 1;
+   constexpr uint32_t kVersion = 2;
    constexpr int kOutputChannels = 2;
    constexpr double kMaxBufferedSeconds = 0.25;
    constexpr float kAutoVisualizerThreshold = 0.025f;
@@ -36,6 +37,43 @@ namespace
    constexpr double kAutoVisualizerMaxDelayMs = 7000.0;
    constexpr float kAutoVisualizerLevelRange = 0.18f;
    constexpr float kAutoVisualizerGateScale = 0.72f;
+
+   uint32_t LoadAcquire(const uint32_t* value)
+   {
+#if BESPOKE_WINDOWS
+      return (uint32_t)InterlockedCompareExchange(
+         reinterpret_cast<volatile LONG*>(const_cast<uint32_t*>(value)), 0, 0);
+#else
+      return __atomic_load_n(value, __ATOMIC_ACQUIRE);
+#endif
+   }
+
+   uint64_t LoadAcquire(const uint64_t* value)
+   {
+#if BESPOKE_WINDOWS
+      return (uint64_t)InterlockedCompareExchange64(
+         reinterpret_cast<volatile LONG64*>(const_cast<uint64_t*>(value)), 0, 0);
+#else
+      return __atomic_load_n(value, __ATOMIC_ACQUIRE);
+#endif
+   }
+
+   void StoreRelease(uint32_t* destination, uint32_t value)
+   {
+#if BESPOKE_WINDOWS
+      InterlockedExchange(reinterpret_cast<volatile LONG*>(destination), (LONG)value);
+#else
+      __atomic_store_n(destination, value, __ATOMIC_RELEASE);
+#endif
+   }
+
+   std::string ReadFixedText(const char* text, size_t capacity)
+   {
+      size_t length = 0;
+      while (length < capacity && text[length] != '\0')
+         ++length;
+      return std::string(text, length);
+   }
 
 #if BESPOKE_WINDOWS
    std::string ToWindowsName(const std::string& text)
@@ -122,7 +160,7 @@ void SparkPlayer::CreateUIControls()
 {
    IDrawableModule::CreateUIControls();
 
-   UIBLOCK(3, 58);
+   UIBLOCK(5, 108);
    BUTTON(mVisualizerPrevButton, "vis-");
    UIBLOCK_SHIFTRIGHT();
    BUTTON(mVisualizerNextButton, "vis+");
@@ -131,10 +169,20 @@ void SparkPlayer::CreateUIControls()
    UIBLOCK_SHIFTRIGHT();
    CHECKBOX(mAutoVisualizerCheckbox, "auto viz", &mAutoVisualizer);
    ENDUIBLOCK0();
+   if (TheTransport != nullptr)
+      mLastNudgeSequence = TheTransport->GetNudgeSequence();
 }
 void SparkPlayer::Poll()
 {
    IDrawableModule::Poll();
+   RefreshMetadata();
+   if (TheTransport != nullptr)
+   {
+      const uint64_t sequence = TheTransport->GetNudgeSequence();
+      if (mSyncTransport && sequence != mLastNudgeSequence)
+         WriteTrackControl(TheTransport->GetLastNudgeDirection() > 0);
+      mLastNudgeSequence = sequence;
+   }
    PublishTransportControl();
    PublishAutoVisualizerControl();
 }
@@ -161,57 +209,79 @@ void SparkPlayer::Process(double time)
 
 #if BESPOKE_WINDOWS || SPARKPLAYER_POSIX_SHM
 
-   const uint64_t generation = mHeader->generation;
-   const uint64_t writeFrame = mHeader->writeFrame;
+   const uint64_t generation = LoadAcquire(&mHeader->generation);
+   if ((generation & 1) != 0)
+   {
+      SetStatus("stream switching");
+      return;
+   }
+
+   const uint64_t writeFrame = LoadAcquire(&mHeader->writeFrame);
    mLastWriteFrame = writeFrame;
+   double readFrame = mReadFrame;
    if (generation != mGeneration)
    {
       mGeneration = generation;
-      ResetReaderToWriter();
+      readFrame = (double)writeFrame;
    }
 
-   const double sourceRate = std::max(1u, mHeader->sampleRate);
+   const double sourceRate = std::max(1u, LoadAcquire(&mHeader->sampleRate));
    const double step = sourceRate / std::max(1.0, (double)gSampleRate);
    const double maxBufferedFrames = sourceRate * kMaxBufferedSeconds;
-   const double available = (double)writeFrame - mReadFrame;
+   const double available = (double)writeFrame - readFrame;
    if (available > maxBufferedFrames)
-      mReadFrame = std::max(0.0, (double)writeFrame - maxBufferedFrames);
+      readFrame = std::max(0.0, (double)writeFrame - maxBufferedFrames);
 
    SyncOutputBuffer(kOutputChannels);
-   target->GetBuffer()->SetNumActiveChannels(kOutputChannels);
-   float* outL = target->GetBuffer()->GetChannel(0);
-   float* outR = target->GetBuffer()->GetChannel(1);
+   mProcessBuffer.SetNumActiveChannels(kOutputChannels);
+   mProcessBuffer.Clear();
+   float* outL = mProcessBuffer.GetChannel(0);
+   float* outR = mProcessBuffer.GetChannel(1);
    float levelSum = 0.0f;
    for (int i = 0; i < bufferSize; ++i)
    {
       float left = 0.0f;
       float right = 0.0f;
-      const uint64_t baseFrame = (uint64_t)std::floor(mReadFrame);
+      const uint64_t baseFrame = (uint64_t)std::floor(readFrame);
       if (writeFrame > baseFrame + 1)
       {
-         const float frac = (float)(mReadFrame - (double)baseFrame);
+         const float frac = (float)(readFrame - (double)baseFrame);
          const float l0 = ReadSample(baseFrame, 0);
          const float r0 = ReadSample(baseFrame, 1);
          const float l1 = ReadSample(baseFrame + 1, 0);
          const float r1 = ReadSample(baseFrame + 1, 1);
          left = l0 + (l1 - l0) * frac;
          right = r0 + (r1 - r0) * frac;
-         mReadFrame += step;
+         readFrame += step;
       }
-      outL[i] += left;
-      outR[i] += right;
+      outL[i] = left;
+      outR[i] = right;
       levelSum += std::max(std::abs(left), std::abs(right));
-      GetVizBuffer()->Write(left, 0);
-      GetVizBuffer()->Write(right, 1);
    }
+
+   const uint64_t generationAfter = LoadAcquire(&mHeader->generation);
+   if (generationAfter != generation || (generationAfter & 1) != 0)
+   {
+      mGeneration = generationAfter;
+      ResetReaderToWriter();
+      SetStatus("stream switching");
+      return;
+   }
+
+   mReadFrame = readFrame;
+   target->GetBuffer()->SetNumActiveChannels(kOutputChannels);
+   Add(target->GetBuffer()->GetChannel(0), outL, bufferSize);
+   Add(target->GetBuffer()->GetChannel(1), outR, bufferSize);
+   GetVizBuffer()->WriteChunk(outL, bufferSize, 0);
+   GetVizBuffer()->WriteChunk(outR, bufferSize, 1);
 
    mLastAudioLevel = levelSum / std::max(1, bufferSize);
    mSmoothedAudioLevel = mSmoothedAudioLevel * 0.85f + mLastAudioLevel * 0.15f;
 
-   if (mHeader->active == 0)
+   if (LoadAcquire(&mHeader->active) == 0)
       SetStatus("writer stopped");
    else
-      SetStatus("connected " + ofToString((int)mHeader->sampleRate) + "hz");
+      SetStatus("connected " + ofToString((int)LoadAcquire(&mHeader->sampleRate)) + "hz");
 #endif
 }
 
@@ -220,8 +290,18 @@ void SparkPlayer::DrawModule()
    if (Minimized() || !IsVisible())
       return;
 
-   DrawTextNormal("sparkplayer", 5, 32);
-   DrawTextNormal(mStatus, 5, 50);
+   ofSetColor(200, 120, 65);
+   DrawTextNormal("TITLE", 5, 25);
+   DrawTextNormal("ARTIST", 5, 43);
+   DrawTextNormal("ALBUM", 5, 61);
+   DrawTextNormal("INFO", 5, 79);
+   ofSetColor(230, 190, 130);
+   DrawTextNormal(mTitle.empty() ? "-" : mTitle, 62, 25);
+   DrawTextNormal(mArtist.empty() ? "-" : mArtist, 62, 43);
+   DrawTextNormal(mAlbum.empty() ? "-" : mAlbum, 62, 61);
+   ofSetColor(150, 150, 150);
+   DrawTextNormal(mInfo.empty() ? mStatus : mInfo, 62, 79);
+   ofSetColor(255);
    if (mVisualizerPrevButton != nullptr)
       mVisualizerPrevButton->Draw();
    if (mVisualizerNextButton != nullptr)
@@ -256,7 +336,15 @@ bool SparkPlayer::EnsureOpen()
    }
 
    mHeader = reinterpret_cast<Header*>(view);
-   if (mHeader->magic != kMagic || mHeader->version != kVersion || mHeader->channels < 1 || mHeader->capacityFrames == 0)
+   const uint32_t magic = LoadAcquire(&mHeader->magic);
+   const uint64_t generation = LoadAcquire(&mHeader->generation);
+   if (magic == 0 || (generation & 1) != 0)
+   {
+      CloseMapping();
+      SetStatus("waiting for shm");
+      return false;
+   }
+   if (magic != kMagic || mHeader->version != kVersion || mHeader->channels < 1 || mHeader->capacityFrames == 0)
    {
       CloseMapping();
       SetStatus("bad shm header");
@@ -268,7 +356,7 @@ bool SparkPlayer::EnsureOpen()
    mSampleRate = std::max(1u, mHeader->sampleRate);
    mMappedBytes = (size_t)mHeader->headerSize + (size_t)mCapacityFrames * (size_t)mChannels * sizeof(float);
    mSamples = reinterpret_cast<const float*>(reinterpret_cast<const uint8_t*>(view) + mHeader->headerSize);
-   mGeneration = mHeader->generation;
+   mGeneration = generation;
    ResetReaderToWriter();
    SetStatus("connected");
    return true;
@@ -294,7 +382,17 @@ bool SparkPlayer::EnsureOpen()
    }
 
    Header* header = reinterpret_cast<Header*>(headerView);
-   if (header->magic != kMagic || header->version != kVersion || header->channels < 1 || header->capacityFrames == 0)
+   const uint32_t magic = LoadAcquire(&header->magic);
+   const uint64_t generation = LoadAcquire(&header->generation);
+   if (magic == 0 || (generation & 1) != 0)
+   {
+      munmap(headerView, sizeof(Header));
+      close(mFd);
+      mFd = -1;
+      SetStatus("waiting for shm");
+      return false;
+   }
+   if (magic != kMagic || header->version != kVersion || header->channels < 1 || header->capacityFrames == 0)
    {
       munmap(headerView, sizeof(Header));
       close(mFd);
@@ -321,7 +419,7 @@ bool SparkPlayer::EnsureOpen()
    mSampleRate = std::max(1u, mHeader->sampleRate);
    mMappedBytes = mappedBytes;
    mSamples = reinterpret_cast<const float*>(reinterpret_cast<const uint8_t*>(view) + mHeader->headerSize);
-   mGeneration = mHeader->generation;
+   mGeneration = generation;
    ResetReaderToWriter();
    SetStatus("connected");
    return true;
@@ -365,7 +463,7 @@ void SparkPlayer::CloseMapping()
 void SparkPlayer::ResetReaderToWriter()
 {
 #if BESPOKE_WINDOWS || SPARKPLAYER_POSIX_SHM
-   const uint64_t writeFrame = mHeader != nullptr ? mHeader->writeFrame : 0;
+   const uint64_t writeFrame = mHeader != nullptr ? LoadAcquire(&mHeader->writeFrame) : 0;
    mReadFrame = (double)writeFrame;
 #endif
 }
@@ -458,8 +556,8 @@ void SparkPlayer::WriteTransportControl(bool shouldPlay)
    if (mHeader == nullptr)
       return;
    ++mTransportControlGeneration;
-   mHeader->reserved[1] = shouldPlay ? 1 : 2;
-   mHeader->reserved[0] = mTransportControlGeneration;
+   StoreRelease(&mHeader->transportState, shouldPlay ? 1 : 2);
+   StoreRelease(&mHeader->transportSequence, mTransportControlGeneration);
 #endif
 }
 
@@ -469,8 +567,41 @@ void SparkPlayer::WriteVisualizerControl(int delta)
    if (mHeader == nullptr)
       return;
    ++mVisualizerControlGeneration;
-   mHeader->reserved[3] = (uint32_t)delta;
-   mHeader->reserved[2] = mVisualizerControlGeneration;
+   StoreRelease(reinterpret_cast<uint32_t*>(&mHeader->visualizerDelta), (uint32_t)delta);
+   StoreRelease(&mHeader->visualizerSequence, mVisualizerControlGeneration);
+#endif
+}
+
+void SparkPlayer::WriteTrackControl(bool next)
+{
+#if BESPOKE_WINDOWS || SPARKPLAYER_POSIX_SHM
+   if (mHeader == nullptr)
+      return;
+   ++mTrackControlGeneration;
+   StoreRelease(&mHeader->trackAction, next ? 1u : 2u);
+   StoreRelease(&mHeader->trackSequence, mTrackControlGeneration);
+#endif
+}
+
+void SparkPlayer::RefreshMetadata()
+{
+#if BESPOKE_WINDOWS || SPARKPLAYER_POSIX_SHM
+   if (mHeader == nullptr)
+      return;
+   const uint32_t sequence = LoadAcquire(&mHeader->metadataSequence);
+   if ((sequence & 1) != 0 || sequence == mMetadataSequence)
+      return;
+   const std::string title = ReadFixedText(mHeader->title, sizeof(mHeader->title));
+   const std::string artist = ReadFixedText(mHeader->artist, sizeof(mHeader->artist));
+   const std::string album = ReadFixedText(mHeader->album, sizeof(mHeader->album));
+   const std::string info = ReadFixedText(mHeader->info, sizeof(mHeader->info));
+   if (LoadAcquire(&mHeader->metadataSequence) != sequence)
+      return;
+   mTitle = title;
+   mArtist = artist;
+   mAlbum = album;
+   mInfo = info;
+   mMetadataSequence = sequence;
 #endif
 }
 void SparkPlayer::SetStatus(const std::string& status)

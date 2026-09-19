@@ -191,6 +191,8 @@ public:
    bool IsEnabled() const override { return true; }
 
    static bool IsTripletInterval(NoteInterval interval);
+   uint64_t GetNudgeSequence() const { return mNudgeSequence; }
+   int GetLastNudgeDirection() const { return mLastNudgeDirection; }
 
 private:
    void UpdateListeners(double jumpMs);
@@ -234,6 +236,8 @@ private:
    int mJumpFromMeasure{ -1 };
    bool mWantSetRandomTempo{ false };
    float mNudgeFactor{ 0 };
+   uint64_t mNudgeSequence{ 0 };
+   int mLastNudgeDirection{ 0 };
    double mSeekMsAfterJump{ 0.0 };
 
    std::list<TransportListenerInfo> mListeners;

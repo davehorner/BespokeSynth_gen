@@ -211,6 +211,9 @@ double Transport::SwingBeat(double pos)
 void Transport::Nudge(double amount)
 {
    mNudgeFactor += amount;
+   mLastNudgeDirection = amount < 0 ? -1 : (amount > 0 ? 1 : 0);
+   if (mLastNudgeDirection != 0)
+      ++mNudgeSequence;
 }
 
 void Transport::DrawModule()

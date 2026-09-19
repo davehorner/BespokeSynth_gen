@@ -16,6 +16,8 @@
 #include "ClickButton.h"
 
 #include <string>
+#include <cstddef>
+#include <cstdint>
 
 #if BESPOKE_WINDOWS
 #include <windows.h>
@@ -57,14 +59,27 @@ private:
       uint64_t totalFrames;
       uint64_t generation;
       uint32_t active;
-      uint32_t reserved[7];
+      uint32_t transportSequence;
+      uint32_t transportState;
+      uint32_t visualizerSequence;
+      int32_t visualizerDelta;
+      uint32_t trackSequence;
+      uint32_t trackAction;
+      uint32_t reserved;
+      uint32_t metadataSequence;
+      char title[128];
+      char artist[128];
+      char album[128];
+      char info[128];
    };
+
+   static_assert(sizeof(Header) == 600, "SparkPlayer shared header ABI changed");
 
    void DrawModule() override;
    void GetModuleDimensions(float& width, float& height) override
    {
-      width = 270;
-      height = 80;
+      width = 430;
+      height = 135;
    }
 
    bool EnsureOpen();
@@ -77,6 +92,8 @@ private:
    void PublishAutoVisualizerControl();
    void WriteTransportControl(bool shouldPlay);
    void WriteVisualizerControl(int delta);
+   void WriteTrackControl(bool next);
+   void RefreshMetadata();
 
 static constexpr const char* kDefaultStreamName = "/sparkplayer_audio";
 
@@ -90,6 +107,7 @@ static constexpr const char* kDefaultStreamName = "/sparkplayer_audio";
    uint32_t mChannels{ 2 };
    uint32_t mTransportControlGeneration{ 0 };
    uint32_t mVisualizerControlGeneration{ 0 };
+   uint32_t mTrackControlGeneration{ 0 };
    bool mHaveLastTransportPaused{ false };
    bool mLastTransportPaused{ false };
    bool mSyncTransport{ true };
@@ -100,6 +118,13 @@ static constexpr const char* kDefaultStreamName = "/sparkplayer_audio";
    double mNextAutoVisualizerTime{ 0.0 };
    double mLastAutoVisualizerPollTime{ 0.0 };
    uint32_t mAutoVisualizerRandomState{ 0x51f15e5u };
+   uint64_t mLastNudgeSequence{ 0 };
+   uint32_t mMetadataSequence{ 0 };
+   std::string mTitle;
+   std::string mArtist;
+   std::string mAlbum;
+   std::string mInfo;
+   ChannelBuffer mProcessBuffer{ gBufferSize };
    ClickButton* mVisualizerPrevButton{ nullptr };
    ClickButton* mVisualizerNextButton{ nullptr };
    Checkbox* mSyncTransportCheckbox{ nullptr };

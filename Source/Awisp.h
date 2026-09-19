@@ -95,6 +95,7 @@ private:
    void UpdateAudioAutomationLevel();
    void CloseInstance();
    void PollInstanceStatus();
+   void SyncWindowGeometryFromInstance();
    void ApplyWindowGeometry();
    void ApplyTitleBarVisible();
    void ApplyRemotePort();
@@ -138,6 +139,9 @@ private:
    float mMusicAutomationAmount{ 0.65f };
    float mAutomationLevel{ 0.0f };
    double mLastAutomationSendTime{ -9999.0 };
+   double mLastWindowGeometryPollTime{ -9999.0 };
+   double mLastWindowGeometryApplyTime{ -9999.0 };
+   bool mApplyingWindowFeedback{ false };
    int mBaseHeight{ 100 };
 
    DropdownList* mShaderDropdown{ nullptr };
